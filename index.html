@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>My Browser</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+    }
+
+    .toolbar {
+      display: flex;
+      gap: 8px;
+      padding: 10px;
+      background: #f3f3f3;
+      border-bottom: 1px solid #ddd;
+      align-items: center;
+    }
+
+    button {
+      padding: 8px 12px;
+      cursor: pointer;
+    }
+
+    input {
+      flex: 1;
+      padding: 8px;
+    }
+
+    #status {
+      padding: 6px 10px;
+      font-size: 13px;
+      background: #fafafa;
+      border-bottom: 1px solid #ddd;
+    }
+
+    webview {
+      width: 100%;
+      height: calc(100vh - 91px);
+    }
+  </style>
+</head>
+<body>
+  <div class="toolbar">
+    <button id="homeBtn">Home</button>
+    <button id="backBtn">Back</button>
+    <button id="forwardBtn">Forward</button>
+    <button id="refreshBtn">Refresh</button>
+    <input id="urlInput" type="text" value="https://example.com" />
+    <button id="goBtn">Go</button>
+  </div>
+
+  <div id="status">Ready</div>
+
+  <webview id="browserView" src="https://example.com"></webview>
+
+  <script>
+    const homeBtn = document.getElementById('homeBtn')
+    const backBtn = document.getElementById('backBtn')
+    const forwardBtn = document.getElementById('forwardBtn')
+    const refreshBtn = document.getElementById('refreshBtn')
+    const goBtn = document.getElementById('goBtn')
+    const urlInput = document.getElementById('urlInput')
+    const browserView = document.getElementById('browserView')
+    const status = document.getElementById('status')
+
+    function formatInput(value) {
+      let input = value.trim()
+
+      const looksLikeUrl =
+        input.startsWith('http://') ||
+        input.startsWith('https://') ||
+        input.startsWith('www.') ||
+        (
+          input.includes('.') &&
+          !input.includes(' ') &&
+          !input.includes('?')
+        )
+
+      if (looksLikeUrl) {
+        if (!input.startsWith('http://') && !input.startsWith('https://')) {
+          input = 'https://' + input
+        }
+        return input
+      }
+
+      return 'https://www.google.com/search?q=' + encodeURIComponent(input)
+    }
+
+    function goToInput() {
+      const finalUrl = formatInput(urlInput.value)
+      browserView.src = finalUrl
+      urlInput.value = finalUrl
+    }
+
+    homeBtn.addEventListener('click', () => {
+      browserView.src = 'https://google.com'
+      urlInput.value = 'https://google.com'
+    })
+
+    backBtn.addEventListener('click', () => {
+      if (browserView.canGoBack()) {
+        browserView.goBack()
+      }
+    })
+
+    forwardBtn.addEventListener('click', () => {
+      if (browserView.canGoForward()) {
+        browserView.goForward()
+      }
+    })
+
+    refreshBtn.addEventListener('click', () => {
+      browserView.reload()
+    })
+
+    goBtn.addEventListener('click', () => {
+      goToInput()
+    })
+
+    urlInput.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') {
+        goToInput()
+      }
+    })
+
+    browserView.addEventListener('did-start-loading', () => {
+      status.textContent = 'Loading...'
+    })
+
+    browserView.addEventListener('did-stop-loading', () => {
+      status.textContent = 'Done'
+      urlInput.value = browserView.getURL()
+    })
+
+    browserView.addEventListener('did-navigate', () => {
+      urlInput.value = browserView.getURL()
+    })
+  </script>
+</body>
+</html>
