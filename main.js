@@ -78,12 +78,9 @@ function createWindow() {
 app.whenReady().then(createWindow)
 
 app.on('window-all-closed', () => {
-  // Clear cache and data on exit (Mullvad style ephemeral session)
-  session.defaultSession.clearStorageData().then(() => {
-    if (process.platform !== 'darwin') {
-      app.quit()
-    }
-  })
+  if (process.platform !== 'darwin') {
+    app.quit()
+  }
 })
 
 app.on('activate', () => {

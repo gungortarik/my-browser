@@ -1,3 +1,7 @@
+const fs = require('fs');
+const path = require('path');
+const os = require('os');
+
 const tabBar = document.getElementById('tabBar')
 const newTabBtn = document.getElementById('newTabBtn')
 
@@ -19,7 +23,18 @@ const addWorkspaceBtn = document.getElementById('addWorkspaceBtn');
 const workspaceList = document.getElementById('workspaceList');
 
 // --- APP STATE ---
-const STORAGE_KEY = 'browser_session_data_v2'; // Bumped key to avoid conflict with old state
+// Platform safe app data path for JSON saving
+const appDataPath = process.platform === 'win32' 
+  ? path.join(process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming'), 'PremiumBrowser')
+  : process.platform === 'darwin'
+    ? path.join(os.homedir(), 'Library', 'Application Support', 'PremiumBrowser')
+    : path.join(os.homedir(), '.config', 'PremiumBrowser');
+
+if (!fs.existsSync(appDataPath)) {
+  fs.mkdirSync(appDataPath, { recursive: true });
+}
+
+const sessionFilePath = path.join(appDataPath, 'session.json');
 
 // Default Structure
 const DEFAULT_WORKSPACES = {
@@ -42,7 +57,7 @@ const webviews = {};
 const iconUnlock = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>`;
 const iconLock = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="11" width="16" height="10" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>`;
 
-// --- PERSISTENCE MODULE ---
+// --- PERSISTENCE MODULE (FS JSON) ---
 function saveSession() {
   const data = {
     workspaces,
@@ -51,13 +66,17 @@ function saveSession() {
     tabCount,
     wsCount
   };
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  try {
+    fs.writeFileSync(sessionFilePath, JSON.stringify(data, null, 2), 'utf8');
+  } catch (err) {
+    console.error('Failed to save session to disk:', err);
+  }
 }
 
 function loadSession() {
-  const stored = localStorage.getItem(STORAGE_KEY);
-  if (stored) {
+  if (fs.existsSync(sessionFilePath)) {
     try {
+      const stored = fs.readFileSync(sessionFilePath, 'utf8');
       const parsed = JSON.parse(stored);
       // Basic validation
       if (parsed.workspaces && Object.keys(parsed.workspaces).length > 0) {
@@ -68,7 +87,7 @@ function loadSession() {
         wsCount = parsed.wsCount || workspaceOrder.length;
       }
     } catch (e) {
-      console.error('Failed to parse session data', e);
+      console.error('Failed to parse session file', e);
       // fallback to defaults already defined
     }
   }
@@ -99,11 +118,6 @@ workspaceBtn.addEventListener('click', () => {
 function switchWorkspace(wsId) {
   if (wsId === currentWorkspaceId) return;
   if (!workspaces[wsId]) return;
-
-  // IMPORTANT: Detach all current workspace webviews from DOM? 
-  // No, just hiding them via CSS is enough since they are 1:1 tied to tabs globally.
-  // Actually, wait, to reduce memory we COULD detach them, but hiding them is faster and preserves scroll state perfectly.
-  // CSS `display: none` is already applied when `active` class is removed!
 
   currentWorkspaceId = wsId;
   const ws = workspaces[currentWorkspaceId];
@@ -256,7 +270,8 @@ function renderWorkspaceTabs() {
   } else {
     ws.tabs.forEach(tab => {
       createTabDOMElement(tab);
-      // If we are restoring from localStorage, the webview might not exist yet!
+      // If we are restoring from FS JSON, the webview might not exist yet!
+      // This elegantly lazy-loads webviews only when their workspace is switched to!
       if (!webviews[tab.id]) {
         createWebview(tab);
       }
@@ -402,7 +417,8 @@ function createWebview(tab) {
 
   // Bind Webview Events
   wv.addEventListener('did-start-loading', () => {
-    if (ws && workspaces[currentWorkspaceId].activeTabId === tab.id) showStatus('Loading...');
+    const ws = workspaces[currentWorkspaceId];
+    if (ws && ws.activeTabId === tab.id) showStatus('Loading...');
   });
   
   wv.addEventListener('did-stop-loading', () => {
@@ -587,7 +603,7 @@ urlInput.addEventListener('keydown', (event) => {
   if (event.key === 'Enter') {
     goToInput();
     const wv = getActiveWebview();
-    if (wv) wv.focus(); // unfocus search bar layer
+    if (wv && wv.focus) wv.focus(); // unfocus search bar layer
   }
 })
 
