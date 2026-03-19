@@ -3,141 +3,119 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>My Browser</title>
-  <style>
-    body {
-      margin: 0;
-      font-family: Arial, sans-serif;
-    }
-
-    .toolbar {
-      display: flex;
-      gap: 8px;
-      padding: 10px;
-      background: #f3f3f3;
-      border-bottom: 1px solid #ddd;
-      align-items: center;
-    }
-
-    button {
-      padding: 8px 12px;
-      cursor: pointer;
-    }
-
-    input {
-      flex: 1;
-      padding: 8px;
-    }
-
-    #status {
-      padding: 6px 10px;
-      font-size: 13px;
-      background: #fafafa;
-      border-bottom: 1px solid #ddd;
-    }
-
-    webview {
-      width: 100%;
-      height: calc(100vh - 91px);
-    }
-  </style>
+  <title>Premium Privacy Browser</title>
+  <link rel="stylesheet" href="assets/css/style.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 </head>
 <body>
-  <div class="toolbar">
-    <button id="homeBtn">Home</button>
-    <button id="backBtn">Back</button>
-    <button id="forwardBtn">Forward</button>
-    <button id="refreshBtn">Refresh</button>
-    <input id="urlInput" type="text" value="https://example.com" />
-    <button id="goBtn">Go</button>
+  <div class="app-container">
+    <!-- Top Chrome Layer -->
+    <header class="browser-chrome">
+      
+      <!-- Row 1: Workspaces and Tabs -->
+      <div class="tab-row">
+        <!-- macOS Window Controls Spacing -->
+        <div class="mac-traffic-lights-spacer"></div>
+        
+        <!-- Workspace Switcher (Left) -->
+        <div class="workspace-btn" id="workspaceBtn" title="Switch Workspace">
+          <div class="workspace-dot" style="background: #5e6ad2"></div>
+          <span id="workspaceLabel">Personal</span>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="ws-chevron"><polyline points="6 9 12 15 18 9"></polyline></svg>
+        </div>
+
+        <!-- Tab Strip -->
+        <div class="tab-list" id="tabBar">
+          <!-- Tabs injected by JavaScript -->
+        </div>
+        
+        <button id="newTabBtn" class="new-tab-btn" title="New Tab">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+        </button>
+      </div>
+
+      <!-- Row 2: Toolbar (Nav, URL, Right Controls) -->
+      <div class="toolbar-row">
+        
+        <!-- Left Nav -->
+        <div class="nav-actions">
+          <button id="backBtn" class="icon-btn" title="Back">
+             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
+          </button>
+          <button id="forwardBtn" class="icon-btn" title="Forward">
+             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+          </button>
+          <button id="refreshBtn" class="icon-btn" title="Refresh">
+             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg>
+          </button>
+          <button id="homeBtn" class="icon-btn" title="Home (google.ca)">
+             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
+          </button>
+        </div>
+
+        <!-- Center URL -->
+        <div class="url-bar-wrapper">
+          <button class="privacy-shield shield-active" title="Privacy Shield Active">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
+          </button>
+          <input id="urlInput" type="text" placeholder="Search or type a URL" spellcheck="false" />
+          <button class="icon-btn bookmark-btn" title="Bookmark Page">
+             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
+          </button>
+        </div>
+
+        <!-- Right Controls -->
+        <div class="right-controls">
+          <button class="icon-btn" title="Downloads">
+             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+          </button>
+          <button class="icon-btn" title="Sync Profile">
+             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+          </button>
+          <button class="icon-btn" title="Settings">
+             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <!-- Context & Dropdown Menus (Glassmorphic) -->
+    
+    <!-- Tab Context Menu -->
+    <div id="tabContextMenu" class="context-menu">
+      <div class="menu-item" id="lockTabAction">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+        <span>Lock Tab</span>
+      </div>
+      <div class="menu-item disabled" id="closeTabAction">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+        <span>Close Tab</span>
+      </div>
+    </div>
+    
+    <!-- Workspace Menu -->
+    <div id="workspaceMenu" class="context-menu dropdown-menu">
+      <div class="ws-list-container" id="workspaceList">
+        <!-- Injected via JS -->
+      </div>
+      <div class="menu-separator"></div>
+      <div class="menu-item add-ws-item" id="addWorkspaceBtn">
+         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg> New Workspace
+      </div>
+    </div>
+
+    <!-- Webview Container (Now holds Multiple Isolated WebViews) -->
+    <main class="main-content">
+      <div class="browser-wrapper" id="browserViewsContainer">
+         <!-- Isolated <webview> elements will be dynamically injected here for every tab -->
+      </div>
+      <!-- Status Overlay -->
+      <div id="status" class="status-overlay">Ready</div>
+    </main>
   </div>
 
-  <div id="status">Ready</div>
-
-  <webview id="browserView" src="https://example.com"></webview>
-
-  <script>
-    const homeBtn = document.getElementById('homeBtn')
-    const backBtn = document.getElementById('backBtn')
-    const forwardBtn = document.getElementById('forwardBtn')
-    const refreshBtn = document.getElementById('refreshBtn')
-    const goBtn = document.getElementById('goBtn')
-    const urlInput = document.getElementById('urlInput')
-    const browserView = document.getElementById('browserView')
-    const status = document.getElementById('status')
-
-    function formatInput(value) {
-      let input = value.trim()
-
-      const looksLikeUrl =
-        input.startsWith('http://') ||
-        input.startsWith('https://') ||
-        input.startsWith('www.') ||
-        (
-          input.includes('.') &&
-          !input.includes(' ') &&
-          !input.includes('?')
-        )
-
-      if (looksLikeUrl) {
-        if (!input.startsWith('http://') && !input.startsWith('https://')) {
-          input = 'https://' + input
-        }
-        return input
-      }
-
-      return 'https://www.google.com/search?q=' + encodeURIComponent(input)
-    }
-
-    function goToInput() {
-      const finalUrl = formatInput(urlInput.value)
-      browserView.src = finalUrl
-      urlInput.value = finalUrl
-    }
-
-    homeBtn.addEventListener('click', () => {
-      browserView.src = 'https://google.com'
-      urlInput.value = 'https://google.com'
-    })
-
-    backBtn.addEventListener('click', () => {
-      if (browserView.canGoBack()) {
-        browserView.goBack()
-      }
-    })
-
-    forwardBtn.addEventListener('click', () => {
-      if (browserView.canGoForward()) {
-        browserView.goForward()
-      }
-    })
-
-    refreshBtn.addEventListener('click', () => {
-      browserView.reload()
-    })
-
-    goBtn.addEventListener('click', () => {
-      goToInput()
-    })
-
-    urlInput.addEventListener('keydown', (event) => {
-      if (event.key === 'Enter') {
-        goToInput()
-      }
-    })
-
-    browserView.addEventListener('did-start-loading', () => {
-      status.textContent = 'Loading...'
-    })
-
-    browserView.addEventListener('did-stop-loading', () => {
-      status.textContent = 'Done'
-      urlInput.value = browserView.getURL()
-    })
-
-    browserView.addEventListener('did-navigate', () => {
-      urlInput.value = browserView.getURL()
-    })
-  </script>
+  <script src="assets/js/renderer.js"></script>
 </body>
 </html>
