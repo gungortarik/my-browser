@@ -10,6 +10,46 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 </head>
 <body>
+
+  <!-- START PAGE OVERLAY -->
+  <div class="start-page active" id="startPage">
+    <div class="start-drag-header"></div> <!-- macOS Window Controls Padding -->
+    
+    <div class="start-container">
+      <div class="start-main-content">
+        
+        <!-- Favorites Section -->
+        <div class="section-header">
+          <h2>Favorites</h2>
+        </div>
+        <div class="favorites-grid" id="favoritesGrid">
+          <!-- Populated by JS -->
+        </div>
+
+        <!-- Workspaces Section -->
+        <div class="section-header mt-40">
+          <h2>Your Workspaces</h2>
+        </div>
+        <div class="start-ws-grid" id="startWsGrid">
+           <!-- Populated by JS -->
+        </div>
+        
+        <div class="continue-ws-container">
+           <button class="glass-btn primary" id="continueWsBtn">Continue Session</button>
+        </div>
+
+      </div>
+      
+      <!-- Bottom Search -->
+      <div class="start-bottom-search">
+        <div class="glass-search-box">
+           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+           <input type="text" id="startSearchInput" placeholder="Search or enter website" spellcheck="false" />
+        </div>
+      </div>
+    </div>
+  </div>
+
   <div class="app-container">
     <!-- Top Chrome Layer -->
     <header class="browser-chrome">
