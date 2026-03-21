@@ -3,9 +3,28 @@
   "version": "1.0.0",
   "description": "",
   "main": "main.js",
- "scripts": {
-  "start": "electron ."
-},
+  "scripts": {
+    "start": "electron .",
+    "pack": "electron-builder --dir",
+    "dist": "electron-builder"
+  },
+  "build": {
+    "appId": "com.tarikgungor.mybrowser",
+    "productName": "Premium Browser",
+    "directories": {
+      "output": "dist"
+    },
+    "mac": {
+      "category": "public.app-category.productivity",
+      "target": ["dmg", "zip"]
+    },
+    "win": {
+      "target": ["nsis", "zip"]
+    },
+    "linux": {
+      "target": ["AppImage", "deb"]
+    }
+  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/gungortarik/my-browser.git"
@@ -19,6 +38,7 @@
   },
   "homepage": "https://github.com/gungortarik/my-browser#readme",
   "devDependencies": {
-    "electron": "^41.0.3"
+    "electron": "^41.0.3",
+    "electron-builder": "^24.13.3"
   }
 }

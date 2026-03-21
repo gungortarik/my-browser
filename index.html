@@ -96,10 +96,31 @@
         </div>
 
         <!-- Center URL -->
-        <div class="url-bar-wrapper">
-          <button class="privacy-shield shield-active" title="Privacy Shield Active">
+        <div class="url-bar-wrapper" style="position: relative;">
+          <button id="shieldBtn" class="privacy-shield shield-active" title="Privacy Shield Active">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
           </button>
+
+          <!-- Privacy Shield Popover -->
+          <div id="shieldMenu" class="shield-popover">
+            <div class="shield-header">
+              <div class="shield-title">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
+                <span>Shields are UP</span>
+              </div>
+              <div class="shield-toggle active" id="shieldToggle">
+                <div class="shield-toggle-knob"></div>
+              </div>
+            </div>
+            <div class="shield-stats">
+              <div class="shield-stat-number" id="shieldBlockCount">0</div>
+              <div class="shield-stat-label">Trackers & Ads Blocked</div>
+            </div>
+            <div class="shield-list" id="shieldBlockList">
+              <!-- Domains listed here dynamically -->
+            </div>
+          </div>
+
           <input id="urlInput" type="text" placeholder="Search or type a URL" spellcheck="false" />
           <button class="icon-btn bookmark-btn" title="Bookmark Page">
              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
@@ -107,10 +128,21 @@
         </div>
 
         <!-- Right Controls -->
-        <div class="right-controls">
-          <button class="icon-btn" title="Downloads">
+        <div class="right-controls" style="position: relative;">
+          <button class="icon-btn" id="downloadsBtn" title="Downloads">
              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
           </button>
+          
+          <!-- Downloads Popover -->
+          <div id="downloadsMenu" class="downloads-popover">
+            <div class="downloads-header">
+              <span>Downloads</span>
+              <button class="text-btn" id="clearDownloadsBtn">Clear</button>
+            </div>
+            <div class="downloads-list" id="downloadsList">
+              <div class="downloads-empty">No recent downloads</div>
+            </div>
+          </div>
           <button class="icon-btn" title="Sync Profile">
              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
           </button>
@@ -148,12 +180,182 @@
 
     <!-- Webview Container (Now holds Multiple Isolated WebViews) -->
     <main class="main-content">
+      <!-- Find in Page Box -->
+      <div id="findBox" class="find-box">
+        <input type="text" id="findInput" placeholder="Find in page..." spellcheck="false" />
+        <span id="findMatchCount" class="find-count">0/0</span>
+        <div class="find-separator"></div>
+        <div class="find-actions">
+          <button id="findPrevBtn" class="icon-btn" title="Previous"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"></polyline></svg></button>
+          <button id="findNextBtn" class="icon-btn" title="Next"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg></button>
+          <button id="findCloseBtn" class="icon-btn" title="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></button>
+        </div>
+      </div>
       <div class="browser-wrapper" id="browserViewsContainer">
          <!-- Isolated <webview> elements will be dynamically injected here for every tab -->
       </div>
       <!-- Status Overlay -->
       <div id="status" class="status-overlay">Ready</div>
     </main>
+  </div>
+
+  <!-- Slide-over Panel for History & Bookmarks -->
+  <div id="sidePanel" class="side-panel">
+    <div class="side-panel-header">
+      <div class="panel-tabs">
+        <button class="panel-tab active" id="tabHistory">History</button>
+        <button class="panel-tab" id="tabBookmarks">Bookmarks</button>
+      </div>
+      <button class="icon-btn close-panel-btn" id="closeSidePanelBtn" title="Close Panel">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+      </button>
+    </div>
+    <div class="panel-content" id="panelContent"></div>
+  </div>
+
+  <!-- Settings Page Overlay -->
+  <div id="settingsPage" class="settings-page">
+    <div class="settings-container-app">
+      
+      <!-- Left Sidebar -->
+      <div class="settings-sidebar">
+        <div class="settings-sidebar-header">Settings</div>
+        <div class="settings-nav">
+          <button class="settings-nav-btn active" data-section="appearance">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"></path><path d="M2 12h20"></path></svg> Appearance
+          </button>
+          <button class="settings-nav-btn" data-section="search">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg> Search Engine
+          </button>
+          <button class="settings-nav-btn" data-section="startup">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg> On Startup
+          </button>
+          <button class="settings-nav-btn" data-section="default-browser">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg> Default Browser
+          </button>
+          <button class="settings-nav-btn" data-section="privacy">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg> Privacy & Security
+          </button>
+          <button class="settings-nav-btn" data-section="downloads">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg> Downloads
+          </button>
+        </div>
+      </div>
+      
+      <!-- Right Content Area -->
+      <div class="settings-main-area">
+        <div class="settings-header">
+          <h2 id="settingsActiveTitle">Appearance</h2>
+          <button id="closeSettingsBtn" class="icon-btn" style="background:transparent;border:none;cursor:pointer;"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#fff" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></button>
+        </div>
+        
+        <div class="settings-content" id="settingsContentArea">
+          
+          <!-- Appearance Section -->
+          <div class="settings-pane active" id="sec-appearance">
+            <div class="settings-section">
+              <h3>Start Page Behavior</h3>
+              <p>Customize what sections you see in your new tabs.</p>
+              <label class="settings-toggle">
+                <input type="checkbox" id="settingShowFavorites" />
+                <span class="toggle-slider"></span>
+                <span class="toggle-label">Show Favorites Grid</span>
+              </label>
+              <label class="settings-toggle">
+                <input type="checkbox" id="settingShowWorkspaces" />
+                <span class="toggle-slider"></span>
+                <span class="toggle-label">Show Workspaces Grid</span>
+              </label>
+            </div>
+            <div class="settings-section" style="opacity: 0.5;">
+              <h3>Theme</h3>
+              <p>Browser appearance is currently forced to Premium Dark mode.</p>
+              <select class="settings-select" disabled>
+                <option>Dark Mode (Default)</option>
+              </select>
+            </div>
+          </div>
+          
+          <!-- Search Section -->
+          <div class="settings-pane" id="sec-search">
+            <div class="settings-section">
+              <h3>Search Engine</h3>
+              <p>Select the default search engine used in the address bar.</p>
+              <select id="settingSearchEngine" class="settings-select">
+                <option value="duckduckgo">DuckDuckGo</option>
+                <option value="google">Google</option>
+                <option value="bing">Bing</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- On Startup Section -->
+          <div class="settings-pane" id="sec-startup">
+            <div class="settings-section">
+              <h3>On Startup</h3>
+              <p>What should the browser load when opening a new tab?</p>
+              <select id="settingHomepageMode" class="settings-select">
+                <option value="start-page">Open the dynamic Start Page</option>
+                <option value="custom">Load a custom URL</option>
+              </select>
+              <input type="text" id="settingHomepageUrl" class="settings-input" placeholder="e.g. https://github.com" style="margin-top:12px;" />
+            </div>
+          </div>
+
+          <!-- Default Browser Section -->
+          <div class="settings-pane" id="sec-default-browser">
+            <div class="settings-section">
+              <h3>Default browser</h3>
+              <p>Make Premium Browser the default application for opening web links.</p>
+              <div style="display:flex; align-items:center; gap: 16px; margin-top: 12px;">
+                <button id="makeDefaultBtn" class="primary-btn" style="padding: 10px 20px;">Make default</button>
+                <span id="defaultBrowserStatus" style="font-size: 13px; color: var(--text-secondary);">Checking status...</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Privacy & Security Section -->
+          <div class="settings-pane" id="sec-privacy">
+            <div class="settings-section">
+              <h3>Shield & Adblock Level</h3>
+              <p>Choose how aggressively the Privacy Shield blocks trackers and ads.</p>
+              <select id="settingShieldMode" class="settings-select" style="margin-bottom: 12px;">
+                <option value="standard">Standard (Blocks known trackers & ads)</option>
+                <option value="strict">Strict (Aggressive blocking, may break some sites)</option>
+              </select>
+              <p style="color: var(--shield-color); font-size: 13px;">🛡️ The built-in Privacy Shield is active globally across all websites, terminating trackers silently before they load.</p>
+            </div>
+            <div class="settings-section danger-zone">
+              <h3>Clear Browsing Data</h3>
+              <p>Wipes out all local browser data including your workspaces' histories. This action cannot be undone.</p>
+              <div style="display:flex; gap:12px; margin-top:20px;">
+                <button id="clearHistoryBtn" class="danger-btn">Clear Browsing History</button>
+                <button id="clearBookmarksBtn" class="danger-btn">Clear All Bookmarks</button>
+              </div>
+            </div>
+          </div>
+          
+          <!-- Downloads Section -->
+          <div class="settings-pane" id="sec-downloads">
+            <div class="settings-section">
+              <h3>Download Location</h3>
+              <p>Choose where downloaded files are saved by default.</p>
+              <div style="display:flex; align-items:center; gap: 12px; margin-bottom: 24px;">
+                <input type="text" id="settingDownloadPath" class="settings-input" readonly placeholder="System Default" style="flex:1; cursor:pointer;" />
+                <button id="changeDownloadPathBtn" class="primary-btn" style="padding: 10px 20px;">Change</button>
+              </div>
+              <label class="settings-toggle">
+                <input type="checkbox" id="settingAskDownload" />
+                <span class="toggle-slider"></span>
+                <span class="toggle-label">Ask where to save each file before downloading</span>
+              </label>
+            </div>
+          </div>
+          
+        </div>
+      </div>
+
+    </div>
   </div>
 
   <script src="assets/js/renderer.js"></script>

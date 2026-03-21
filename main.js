@@ -1,4 +1,7 @@
-const { app, BrowserWindow, session } = require('electron')
+const { app, BrowserWindow, session, Menu, clipboard, ipcMain, dialog } = require('electron')
+const path = require('path')
+
+let downloadSettings = { askEveryTime: false, path: '' };
 
 function createWindow() {
   const win = new BrowserWindow({
@@ -19,28 +22,43 @@ function createWindow() {
     urls: ['*://*/*']
   }
   
-  // Basic Ad & Tracker Blocklist
-  const blockList = [
+  let currentShieldMode = 'standard';
+  ipcMain.on('update-shield-mode', (event, mode) => {
+    currentShieldMode = mode;
+  });
+
+  const standardBlockList = [
     '*://*.doubleclick.net/*',
     '*://*.google-analytics.com/*',
-    '*://*.facebook.com/tr*',
-    '*://*.criteo.com/*',
-    '*://*.adzerk.net/*',
     '*://*.amazon-adsystem.com/*',
     '*://*.scorecardresearch.com/*',
-    '*://*.quantserve.com/*',
     '*://*.googlesyndication.com/*'
-  ]
+  ];
+
+  const strictBlockList = [
+    ...standardBlockList,
+    '*://*.facebook.com/*',
+    '*://*.facebook.net/*',
+    '*://*.twitter.com/tr*',
+    '*://*.tiktok.com/*', 
+    '*://*.criteo.com/*',
+    '*://*.hotjar.com/*',
+    '*://*.adzerk.net/*',
+    '*://*.quantserve.com/*'
+  ];
 
   win.webContents.session.webRequest.onBeforeRequest(filter, (details, callback) => {
-    // Check if the request matches our dummy blocklist
-    const isBlocked = blockList.some(pattern => {
+    const listToUse = currentShieldMode === 'strict' ? strictBlockList : standardBlockList;
+    
+    // Check if the request matches our blocklist
+    const isBlocked = listToUse.some(pattern => {
       const regexPattern = pattern.replace(/\*/g, '.*');
       return new RegExp(regexPattern).test(details.url);
     });
 
     if (isBlocked) {
       console.log(`[Shield] Blocked tracker: ${details.url}`)
+      win.webContents.send('tracker-blocked', { webContentsId: details.webContentsId, url: details.url });
       callback({ cancel: true })
     } else {
       callback({ cancel: false })
@@ -72,6 +90,38 @@ function createWindow() {
   // Hardcore WebRTC policy - Disable non-proxied UDP (prevents IP leaks behind VPN)
   win.webContents.setWebRTCIPHandlingPolicy('disable_non_proxied_udp')
 
+  // --- DOWNLOAD MANAGER ---
+  win.webContents.session.on('will-download', (event, item, webContents) => {
+    const fileName = item.getFilename();
+    const id = Date.now().toString(); // unique ID
+    
+    if (downloadSettings.askEveryTime) {
+      item.setSaveDialogOptions({ defaultPath: fileName });
+    } else if (downloadSettings.path) {
+      item.setSavePath(path.join(downloadSettings.path, fileName));
+    }
+    
+    win.webContents.send('download-started', { id, fileName });
+
+    item.on('updated', (event, state) => {
+      if (state === 'interrupted') {
+        win.webContents.send('download-interrupted', { id });
+      } else if (state === 'progressing') {
+        if (!item.isPaused()) {
+          const received = item.getReceivedBytes();
+          const total = item.getTotalBytes();
+          const percent = total > 0 ? (received / total) * 100 : 0;
+          win.webContents.send('download-progress', { id, percent, received, total });
+        }
+      }
+    });
+
+    item.once('done', (event, state) => {
+      const savePath = item.getSavePath();
+      win.webContents.send('download-done', { id, state, savePath });
+    });
+  });
+
   win.loadFile('index.html')
 }
 
@@ -88,3 +138,70 @@ app.on('activate', () => {
     createWindow()
   }
 })
+
+// Add Context Menu to all WebViews automatically
+app.on('web-contents-created', (event, contents) => {
+  if (contents.getType && contents.getType() === 'webview') {
+    contents.on('context-menu', (event, params) => {
+      const menuTemplate = [
+        { role: 'undo' },
+        { role: 'redo' },
+        { type: 'separator' },
+        { role: 'cut' },
+        { role: 'copy' },
+        { role: 'paste' },
+        { role: 'delete' },
+        { type: 'separator' },
+        { role: 'selectAll' }
+      ];
+      
+      if (params.linkURL) {
+        menuTemplate.push({ type: 'separator' });
+        menuTemplate.push({
+          label: 'Copy Link',
+          click: () => clipboard.writeText(params.linkURL)
+        });
+      }
+      
+      if (params.hasImageContents && params.srcURL) {
+        menuTemplate.push({
+          label: 'Copy Image URL',
+          click: () => clipboard.writeText(params.srcURL)
+        });
+      }
+      
+      menuTemplate.push({ type: 'separator' });
+      menuTemplate.push({
+        label: 'Inspect Element',
+        click: () => contents.inspectElement(params.x, params.y)
+      });
+
+      const menu = Menu.buildFromTemplate(menuTemplate);
+      menu.popup();
+    });
+  }
+});
+
+// Default Browser Handlers
+ipcMain.handle('check-default-browser', () => {
+  return app.isDefaultProtocolClient('http');
+});
+
+ipcMain.handle('set-default-browser', () => {
+  app.setAsDefaultProtocolClient('http');
+  app.setAsDefaultProtocolClient('https');
+  return app.isDefaultProtocolClient('http');
+});
+
+// Download Settings Handlers
+ipcMain.on('update-download-settings', (event, settings) => {
+  downloadSettings = settings;
+});
+
+ipcMain.handle('select-download-folder', async () => {
+  const result = await dialog.showOpenDialog({
+    properties: ['openDirectory', 'createDirectory']
+  });
+  if (result.canceled) return null;
+  return result.filePaths[0];
+});
