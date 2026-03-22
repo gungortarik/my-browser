@@ -1,4 +1,4 @@
-const { app, BrowserWindow, session, Menu, clipboard, ipcMain, dialog, safeStorage } = require('electron')
+const { app, BrowserWindow, session, Menu, clipboard, ipcMain, dialog, safeStorage, shell } = require('electron')
 const path = require('path')
 const fs = require('fs')
 const os = require('os')
@@ -447,6 +447,76 @@ ipcMain.handle('get-extensions', () => {
   });
 });
 
+// --- DOWNLOAD MANAGER ---
+const activeDownloadItems = new Map();
+
+function setupDownloadHandler(sess) {
+  sess.on('will-download', (event, item, webContents) => {
+    const id = Date.now().toString() + Math.random().toString(36).substr(2, 5);
+    const filename = item.getFilename();
+    const totalBytes = item.getTotalBytes();
+    
+    activeDownloadItems.set(id, item);
+    
+    let win = BrowserWindow.fromWebContents(webContents);
+    if (!win) {
+      const wins = BrowserWindow.getAllWindows();
+      if(wins.length > 0) win = wins[0];
+    }
+    
+    if (win) {
+      win.webContents.send('download-started', { id, filename, totalBytes });
+    }
+    
+    item.on('updated', (event, state) => {
+      if (win) {
+        win.webContents.send('download-progress', {
+          id,
+          receivedBytes: item.getReceivedBytes(),
+          totalBytes: item.getTotalBytes(),
+          state // 'progressing' or 'interrupted'
+        });
+      }
+    });
+    
+    item.on('done', (event, state) => {
+      if (win) {
+        win.webContents.send('download-done', {
+          id,
+          state, // 'completed', 'cancelled', 'interrupted'
+          path: item.getSavePath()
+        });
+      }
+      activeDownloadItems.delete(id);
+    });
+  });
+}
+
+ipcMain.on('pause-download', (event, id) => {
+  const item = activeDownloadItems.get(id);
+  if (item && !item.isPaused()) item.pause();
+});
+
+ipcMain.on('resume-download', (event, id) => {
+  const item = activeDownloadItems.get(id);
+  if (item && item.canResume()) item.resume();
+});
+
+ipcMain.on('cancel-download', (event, id) => {
+  const item = activeDownloadItems.get(id);
+  if (item) {
+    item.cancel();
+    activeDownloadItems.delete(id);
+  }
+});
+
+ipcMain.on('show-item-in-folder', (event, filePath) => {
+  if (fs.existsSync(filePath)) {
+    shell.showItemInFolder(filePath);
+  }
+});
+
+// --- CHROME EXTENSIONS ENGINE ---
 ipcMain.handle('install-chrome-extension', async (event, extId) => {
   try {
     const extDir = path.join(appDataPath, 'CrxStore');
@@ -503,6 +573,9 @@ app.whenReady().then(async () => {
       saveExtensionPaths();
     }
   }
+
+  setupDownloadHandler(session.defaultSession);
+  setupDownloadHandler(session.fromPartition('incognito'));
   
   createWindow(false);
 })

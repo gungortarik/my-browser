@@ -1802,3 +1802,34 @@ body.incognito-theme .incognito-badge {
   text-align: center;
   padding: 20px 0;
 }
+
+.dl-progress-bg {
+  height: 4px;
+  background: rgba(255,255,255,0.1);
+  border-radius: 2px;
+  margin-top: 8px;
+  overflow: hidden;
+}
+
+.dl-progress-fill {
+  height: 100%;
+  background: var(--accent);
+  width: 0%;
+  transition: width 0.3s;
+}
+
+.downloads-badge {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 8px;
+  height: 8px;
+  background: var(--accent);
+  border-radius: 50%;
+  display: none;
+}
+
+.has-active-download .downloads-badge {
+  display: block;
+  animation: pulse 1.5s infinite;
+}
