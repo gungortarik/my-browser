@@ -10,6 +10,7 @@ const forwardBtn = document.getElementById('forwardBtn')
 const refreshBtn = document.getElementById('refreshBtn')
 const homeBtn = document.getElementById('homeBtn')
 const urlInput = document.getElementById('urlInput')
+const readerBtn = document.getElementById('readerBtn')
 const browserViewsContainer = document.getElementById('browserViewsContainer')
 const statusLabel = document.getElementById('status')
 
@@ -38,6 +39,11 @@ const downloadsBtn = document.getElementById('downloadsBtn');
 const downloadsMenu = document.getElementById('downloadsMenu');
 const downloadsList = document.getElementById('downloadsList');
 const clearDownloadsBtn = document.getElementById('clearDownloadsBtn');
+
+// Media Hub DOM
+const mediaBtn = document.getElementById('mediaBtn');
+const mediaPopup = document.getElementById('mediaPopup');
+const mediaList = document.getElementById('mediaList');
 
 // Side Panel DOM
 const sidePanel = document.getElementById('sidePanel');
@@ -77,8 +83,28 @@ const makeDefaultBtn = document.getElementById('makeDefaultBtn');
 const defaultBrowserStatus = document.getElementById('defaultBrowserStatus');
 const settingShieldMode = document.getElementById('settingShieldMode');
 
+// Password Manager DOM
+const passwordPrompt = document.getElementById('passwordPrompt');
+const pwdPromptDomain = document.getElementById('pwdPromptDomain');
+const pwdPromptUser = document.getElementById('pwdPromptUser');
+const pwdPromptSave = document.getElementById('pwdPromptSave');
+const pwdPromptNever = document.getElementById('pwdPromptNever');
+const passwordManagerList = document.getElementById('passwordManagerList');
+let pendingPasswordData = null;
+
+// Extension Manager DOM
+const loadExtensionBtn = document.getElementById('loadExtensionBtn');
+const extensionsList = document.getElementById('extensionsList');
+const extensionIconsContainer = document.getElementById('extensionIconsContainer');
+const extPopupContainer = document.getElementById('extPopupContainer');
+const extPopupWebview = document.getElementById('extPopupWebview');
+const closeExtPopupBtn = document.getElementById('closeExtPopupBtn');
+const extPopupTitle = document.getElementById('extPopupTitle');
+const crxIdInput = document.getElementById('crxIdInput');
+const installCrxBtn = document.getElementById('installCrxBtn');
+
 // --- APP STATE ---
-const appDataPath = process.platform === 'win32' 
+const appDataPath = process.platform === 'win32'
   ? path.join(process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming'), 'PremiumBrowser')
   : process.platform === 'darwin'
     ? path.join(os.homedir(), 'Library', 'Application Support', 'PremiumBrowser')
@@ -114,10 +140,25 @@ const DEFAULT_SETTINGS = {
   }
 };
 
-let appMode = 'start'; 
+const urlParams = new URLSearchParams(window.location.search);
+const isIncognito = urlParams.get('incognito') === 'true';
+
+if (isIncognito) {
+  document.body.classList.add('incognito-theme');
+}
+
+const incognitoBtn = document.getElementById('incognitoBtn');
+if (incognitoBtn) {
+  incognitoBtn.addEventListener('click', () => {
+    ipcRenderer.send('open-incognito-window');
+  });
+}
+
+let appMode = isIncognito ? 'incognito' : 'start'; // 'start', 'split', 'workspace', 'temporary', 'incognito'
+let isSplitting = false;
 let workspaces = { ...DEFAULT_WORKSPACES };
 let workspaceOrder = ['ws_personal', 'ws_work'];
-let currentWorkspaceId = 'ws_personal'; 
+let currentWorkspaceId = 'ws_personal';
 let favorites = [...DEFAULT_FAVORITES];
 let settings = JSON.parse(JSON.stringify(DEFAULT_SETTINGS));
 
@@ -138,34 +179,35 @@ const iconLock = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" str
 // --- PERSISTENCE MODULE (FS JSON) ---
 let saveTimeout = null;
 function saveSession() {
-  if (saveTimeout) clearTimeout(saveTimeout);
-  
+  if (isIncognito || appMode === 'temporary') return;
+  clearTimeout(saveTimeout);
+
   saveTimeout = setTimeout(() => {
     const persistentWorkspaces = { ...workspaces };
     if (persistentWorkspaces['ws_temp']) delete persistentWorkspaces['ws_temp'];
-    
+
     const safeCurrentWorkspaceId = currentWorkspaceId === 'ws_temp' ? workspaceOrder[0] : currentWorkspaceId;
 
-    const data = { 
-      workspaces: persistentWorkspaces, 
-      workspaceOrder, 
-      currentWorkspaceId: safeCurrentWorkspaceId, 
-      tabCount, 
-      wsCount, 
-      favorites, 
+    const data = {
+      workspaces: persistentWorkspaces,
+      workspaceOrder,
+      currentWorkspaceId: safeCurrentWorkspaceId,
+      tabCount,
+      wsCount,
+      favorites,
       settings,
       globalHistory,
       bookmarks,
       recentlyClosedTabs
     };
-    
+
     try {
       fs.writeFileSync(sessionFilePath, JSON.stringify(data, null, 2), 'utf8');
-      ipcRenderer.send('update-download-settings', settings.downloads || {askEveryTime: false, path: ''});
+      ipcRenderer.send('update-download-settings', settings.downloads || { askEveryTime: false, path: '' });
     } catch (err) {
       console.error('Failed to save session to disk:', err);
     }
-  }, 300); 
+  }, 300);
 }
 
 function loadSession() {
@@ -184,8 +226,8 @@ function loadSession() {
         if (parsed.bookmarks) bookmarks = parsed.bookmarks;
         if (parsed.recentlyClosedTabs) recentlyClosedTabs = parsed.recentlyClosedTabs;
         if (parsed.settings) {
-          settings = { 
-            ...DEFAULT_SETTINGS, 
+          settings = {
+            ...DEFAULT_SETTINGS,
             ...parsed.settings,
             startPage: { ...DEFAULT_SETTINGS.startPage, ...(parsed.settings.startPage || {}) }
           };
@@ -218,7 +260,7 @@ document.addEventListener('keydown', (e) => {
   const key = e.key.toLowerCase();
 
   // If focused on an input, DO NOT intercept default text editing behavior (Arrow jumping).
-  const isInputFocused = document.activeElement && 
+  const isInputFocused = document.activeElement &&
     (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA');
 
   if (mod && !shift && !alt) {
@@ -332,7 +374,7 @@ document.addEventListener('keydown', (e) => {
     // Alt + Left | Alt + Right Navigation
     // Do not intercept if user is actively text editing (word-jumping)
     if (isInputFocused) return;
-    
+
     if (e.key === 'ArrowLeft') {
       e.preventDefault();
       const wvBack = getActiveWebview();
@@ -414,20 +456,20 @@ function renderSidePanelList(items, emptyMsg) {
     panelContent.innerHTML = `<div class="panel-empty">${emptyMsg}</div>`;
     return;
   }
-  
+
   items.forEach(item => {
     const el = document.createElement('div');
     el.className = 'panel-item';
-    
+
     let iconStr = '📄';
     try {
       if (item.url && item.url !== 'about:blank') {
-         const urlObj = new URL(item.url);
-         const host = urlObj.hostname.replace('www.', '');
-         iconStr = host.charAt(0).toUpperCase();
+        const urlObj = new URL(item.url);
+        const host = urlObj.hostname.replace('www.', '');
+        iconStr = host.charAt(0).toUpperCase();
       }
-    } catch(e) {}
-    
+    } catch (e) { }
+
     el.innerHTML = `
       <div class="panel-item-icon">${iconStr}</div>
       <div class="panel-item-info">
@@ -435,13 +477,13 @@ function renderSidePanelList(items, emptyMsg) {
         <div class="panel-item-url">${item.url}</div>
       </div>
     `;
-    
+
     el.addEventListener('click', () => {
       const wv = getActiveWebview();
       if (wv && wv.loadURL) wv.loadURL(item.url);
       toggleSidePanel(false);
     });
-    
+
     panelContent.appendChild(el);
   });
 }
@@ -456,12 +498,12 @@ if (bookmarkBtn) {
   bookmarkBtn.addEventListener('click', () => {
     const activeTab = getActiveTab();
     if (!activeTab || !activeTab.url) return;
-    
+
     if (activeTab.url === 'about:blank') return;
-    
+
     const urlStr = activeTab.url;
     const existingIndex = bookmarks.findIndex(b => b.url === urlStr);
-    
+
     if (existingIndex > -1) {
       bookmarks.splice(existingIndex, 1);
       bookmarkBtn.classList.remove('active-bookmark');
@@ -485,7 +527,7 @@ function updateBookmarkVisuals(url) {
 
 // --- HISTORY LOGIC ---
 function registerHistoryEvent(url, title) {
-  if (appMode === 'temporary') return; 
+  if (appMode === 'temporary') return;
   if (!url || url === 'about:blank') return;
 
   globalHistory.push({
@@ -514,15 +556,15 @@ function switchWorkspace(wsId) {
   appMode = 'workspace';
   currentWorkspaceId = wsId;
   const ws = workspaces[currentWorkspaceId];
-  
+
   document.getElementById('workspaceLabel').textContent = ws.name;
   document.querySelector('#workspaceBtn .workspace-dot').style.background = ws.color;
   workspaceMenu.classList.remove('visible');
   startPage.classList.remove('active');
-  
+
   renderWorkspaceTabs();
   showStatus(`Switched to ${ws.name}`);
-  saveSession(); 
+  saveSession();
 }
 
 function deleteWorkspace(wsId) {
@@ -544,7 +586,7 @@ function deleteWorkspace(wsId) {
 
   delete workspaces[wsId];
   workspaceOrder = workspaceOrder.filter(id => id !== wsId);
-  
+
   saveSession();
   renderWorkspaceMenu();
 }
@@ -553,7 +595,7 @@ function renameWorkspace(wsId, newName) {
   if (!newName.trim()) return;
   workspaces[wsId].name = newName;
   saveSession();
-  
+
   if (wsId === currentWorkspaceId && appMode === 'workspace') {
     document.getElementById('workspaceLabel').textContent = newName;
   }
@@ -626,8 +668,29 @@ function renderWorkspaceMenu() {
 
 // --- GLOBAL START PAGE & APP MODES LOGIC ---
 function renderStartPage() {
-  appMode = 'start';
-  
+  appMode = isIncognito ? 'incognito' : 'start';
+  const startPageOverlay = document.getElementById('startPage');
+
+  if (isIncognito) {
+    if (startPageOverlay) startPageOverlay.style.background = '#121212';
+    document.querySelector('.start-main-content').innerHTML = `
+      <div class="fade-in" style="display:flex; flex-direction:column; align-items:center; justify-content:center; height:100%; color:#fff;">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#bb86fc" stroke-width="1.5" style="width:100px; height:100px; margin-bottom: 24px;">
+           <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><path d="M22 4L12 14.01l-3-3"></path>
+        </svg>
+        <h1 style="font-size:32px; font-weight:300; margin-bottom:12px;">You've gone Incognito</h1>
+        <p style="color:#aaa; max-width:500px; text-align:center; line-height:1.6;">Now you can browse privately. Other people who use this device won't see your activity.</p>
+        <p style="color:#bb86fc; margin-top:24px;">Premium Browser won't save:</p>
+        <ul style="color:#aaa; margin-top:8px; line-height:1.8;">
+           <li>Your browsing history</li>
+           <li>Cookies and site data</li>
+           <li>Information entered in forms</li>
+        </ul>
+      </div>
+    `;
+    return;
+  }
+
   favoritesGrid.parentElement.style.display = settings.startPage.showFavorites ? 'block' : 'none';
   startWsGrid.parentElement.style.display = settings.startPage.showWorkspaces ? 'block' : 'none';
 
@@ -681,14 +744,14 @@ function startTemporarySession(initialUrl) {
     tabs: [],
     activeTabId: null
   };
-  
+
   currentWorkspaceId = 'ws_temp';
-  
+
   document.getElementById('workspaceLabel').textContent = 'Temporary Session';
   document.querySelector('#workspaceBtn .workspace-dot').style.background = '#909095';
 
   createTab(initialUrl);
-  renderWorkspaceTabs(); 
+  renderWorkspaceTabs();
 }
 
 // --- BROWSER CORE LOGIC ---
@@ -714,10 +777,10 @@ lockTabAction.addEventListener('click', () => {
   if (contextMenuTargetTabId === null) return;
   const ws = workspaces[currentWorkspaceId];
   const tabData = ws.tabs.find(t => t.id === contextMenuTargetTabId);
-  
+
   if (!tabData) return;
-  tabData.isLocked = !tabData.isLocked; 
-  
+  tabData.isLocked = !tabData.isLocked;
+
   const tabEl = document.querySelector(`.tab[data-id="${contextMenuTargetTabId}"]`);
   if (tabData.isLocked) {
     tabEl.classList.add('locked');
@@ -747,17 +810,17 @@ function showStatus(text) {
 
 function formatInput(value) {
   let input = value.trim()
-  const looksLikeUrl = 
-    input.startsWith('http://') || 
-    input.startsWith('https://') || 
-    input.startsWith('chrome://') || 
-    input.startsWith('localhost:') || 
+  const looksLikeUrl =
+    input.startsWith('http://') ||
+    input.startsWith('https://') ||
+    input.startsWith('chrome://') ||
+    input.startsWith('localhost:') ||
     (input.includes('.') && !input.includes(' ') && !input.includes('?'));
 
   if (looksLikeUrl) {
     return !input.match(/^[a-zA-Z]+:\/\//) ? 'https://' + input : input;
   }
-  
+
   if (settings.searchEngine === 'google') {
     return 'https://www.google.com/search?q=' + encodeURIComponent(input);
   } else if (settings.searchEngine === 'bing') {
@@ -781,9 +844,9 @@ function getActiveWebview() {
 function setActiveTab(tabId) {
   const ws = workspaces[currentWorkspaceId];
   if (!ws) return;
-  
+
   ws.activeTabId = tabId;
-  
+
   document.querySelectorAll('.tab').forEach(tabEl => {
     tabEl.classList.toggle('active', Number(tabEl.dataset.id) === Number(tabId));
   });
@@ -802,7 +865,17 @@ function setActiveTab(tabId) {
   } else {
     urlInput.value = activeTab.url;
   }
-  
+
+  if (readerBtn) {
+    if (activeTab.isReaderMode) {
+      readerBtn.classList.add('active');
+      readerBtn.style.color = 'var(--accent, #6ab04c)';
+    } else {
+      readerBtn.classList.remove('active');
+      readerBtn.style.color = '';
+    }
+  }
+
   updateBookmarkVisuals(urlInput.value);
   if (typeof updateShieldUI === 'function') updateShieldUI();
   if (appMode !== 'temporary') saveSession();
@@ -824,7 +897,9 @@ function createWebview(tab) {
   wv.className = 'browser-view';
   wv.dataset.tabId = tab.id;
   wv.src = tab.url;
-  
+  wv.preload = `file://${path.join(__dirname, 'preload.js')}`;
+  if (isIncognito) wv.partition = 'incognito';
+
   browserViewsContainer.appendChild(wv);
   webviews[tab.id] = wv;
 
@@ -848,11 +923,24 @@ function createWebview(tab) {
     }
   });
 
+  wv.addEventListener('media-started-playing', () => {
+    tab.isAudible = true;
+    tab.hasMedia = true;
+    reorderTabsInDOM();
+    if(mediaPopup && mediaPopup.classList.contains('visible')) renderMediaHub();
+  });
+  
+  wv.addEventListener('media-paused', () => {
+    tab.isAudible = false;
+    reorderTabsInDOM();
+    if(mediaPopup && mediaPopup.classList.contains('visible')) renderMediaHub();
+  });
+
   wv.addEventListener('did-start-loading', () => {
     const ws = workspaces[currentWorkspaceId];
     if (ws && ws.activeTabId === tab.id) showStatus('Loading...');
   });
-  
+
   wv.addEventListener('did-stop-loading', () => {
     if (workspaces[currentWorkspaceId] && workspaces[currentWorkspaceId].activeTabId === tab.id) {
       showStatus('Ready');
@@ -868,7 +956,7 @@ function createWebview(tab) {
   });
 
   wv.addEventListener('page-title-updated', (event) => updateTabTitle(tab.id, event.title));
-  
+
   wv.addEventListener('did-navigate', (e) => {
     tab.url = wv.getURL();
     if (workspaces[currentWorkspaceId] && workspaces[currentWorkspaceId].activeTabId === tab.id && document.activeElement !== urlInput) {
@@ -878,7 +966,7 @@ function createWebview(tab) {
     registerHistoryEvent(tab.url, wv.getTitle());
     if (appMode !== 'temporary') saveSession();
   });
-  
+
   wv.addEventListener('did-navigate-in-page', (e) => {
     tab.url = wv.getURL();
     if (workspaces[currentWorkspaceId] && workspaces[currentWorkspaceId].activeTabId === tab.id && document.activeElement !== urlInput) {
@@ -890,6 +978,14 @@ function createWebview(tab) {
   });
 }
 
+function reorderTabsInDOM() {
+  const ws = workspaces[currentWorkspaceId];
+  if (!ws) return;
+  tabBar.innerHTML = '';
+  ws.tabs.forEach(t => createTabDOMElement(t));
+  setActiveTab(ws.activeTabId);
+}
+
 function createTabDOMElement(tab) {
   const tabEl = document.createElement('div')
   tabEl.className = 'tab'
@@ -897,7 +993,65 @@ function createTabDOMElement(tab) {
   if (tab.isLocked) tabEl.classList.add('locked');
 
   const lockIcon = tab.isLocked ? iconLock : iconUnlock;
-  tabEl.innerHTML = `<span class="tab-title">${tab.title}</span><span class="close-tab">${lockIcon}</span>`
+  const muteHtml = tab.isMuted ? '<span class="mute-tab-btn" title="Unmute">🔇</span>' : 
+                   (tab.isAudible ? '<span class="mute-tab-btn" title="Mute">🔊</span>' : '');
+
+  tabEl.innerHTML = `<span class="tab-title">${tab.title}</span>${muteHtml}<span class="close-tab">${lockIcon}</span>`
+  
+  const muteBtn = tabEl.querySelector('.mute-tab-btn');
+  if (muteBtn) {
+    muteBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const wv = webviews[tab.id];
+      if (wv) {
+        const isMuted = !wv.isAudioMuted();
+        wv.setAudioMuted(isMuted);
+        tab.isMuted = isMuted;
+        reorderTabsInDOM();
+      }
+    });
+  }
+
+  tabEl.draggable = true;
+  tabEl.addEventListener('dragstart', (e) => {
+    e.dataTransfer.setData('text/plain', tab.id);
+    tabEl.classList.add('dragging');
+  });
+
+  tabEl.addEventListener('dragend', () => {
+    tabEl.classList.remove('dragging');
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('drag-over'));
+  });
+
+  tabEl.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    tabEl.classList.add('drag-over');
+  });
+
+  tabEl.addEventListener('dragleave', () => {
+    tabEl.classList.remove('drag-over');
+  });
+
+  tabEl.addEventListener('drop', (e) => {
+    e.preventDefault();
+    tabEl.classList.remove('drag-over');
+    
+    const draggedId = Number(e.dataTransfer.getData('text/plain'));
+    if (draggedId === tab.id) return;
+    
+    const ws = workspaces[currentWorkspaceId];
+    if (!ws) return;
+    
+    const fromIndex = ws.tabs.findIndex(t => t.id === draggedId);
+    const toIndex = ws.tabs.findIndex(t => t.id === tab.id);
+    
+    if (fromIndex !== -1 && toIndex !== -1) {
+      const movedTab = ws.tabs.splice(fromIndex, 1)[0];
+      ws.tabs.splice(toIndex, 0, movedTab);
+      if (appMode !== 'temporary') saveSession();
+      reorderTabsInDOM();
+    }
+  });
 
   tabEl.addEventListener('click', () => setActiveTab(tab.id));
 
@@ -923,7 +1077,7 @@ function createTabDOMElement(tab) {
   tabBar.appendChild(tabEl)
 }
 
-function createTab(initialUrl = 'https://duckduckgo.com') { 
+function createTab(initialUrl = 'https://duckduckgo.com') {
   tabCount++
   const id = tabCount
   const tab = { id, title: `New Tab`, url: initialUrl, isLocked: false }
@@ -956,7 +1110,7 @@ function closeTab(tabId) {
 
   const tabEl = document.querySelector(`.tab[data-id="${tabId}"]`)
   if (tabEl) tabEl.remove();
-  
+
   if (webviews[tabId]) {
     webviews[tabId].remove();
     delete webviews[tabId];
@@ -981,7 +1135,7 @@ function goToInput() {
   activeTab.url = finalUrl;
   const wv = getActiveWebview();
   if (wv) wv.src = finalUrl;
-  
+
   urlInput.value = finalUrl;
   if (appMode !== 'temporary') saveSession();
 }
@@ -989,6 +1143,13 @@ function goToInput() {
 // --- TOOLBAR BUTTON HANDLERS ---
 newTabBtn.addEventListener('click', () => createTab())
 backBtn.addEventListener('click', () => { const wv = getActiveWebview(); if (wv && wv.canGoBack && wv.canGoBack()) wv.goBack(); })
+
+tabBar.addEventListener('wheel', (e) => {
+  if (e.deltaY !== 0) {
+    e.preventDefault();
+    tabBar.scrollLeft += e.deltaY;
+  }
+});
 forwardBtn.addEventListener('click', () => { const wv = getActiveWebview(); if (wv && wv.canGoForward && wv.canGoForward()) wv.goForward(); })
 refreshBtn.addEventListener('click', () => { const wv = getActiveWebview(); if (wv && wv.reload) wv.reload(); })
 
@@ -1001,11 +1162,11 @@ homeBtn.addEventListener('click', () => {
     const finalUrl = formatInput(settings.homepageUrl);
     const activeTab = getActiveTab();
     if (!activeTab) return;
-    
+
     activeTab.url = finalUrl;
     const wv = getActiveWebview();
     if (wv) wv.src = finalUrl;
-    
+
     urlInput.value = finalUrl;
     if (appMode !== 'temporary') saveSession();
   }
@@ -1020,6 +1181,155 @@ urlInput.addEventListener('keydown', (event) => {
 })
 
 urlInput.addEventListener('click', () => urlInput.select())
+
+// --- READER MODE ---
+if (readerBtn) {
+  readerBtn.addEventListener('click', () => {
+    const wv = getActiveWebview();
+    const tab = getActiveTab();
+    if (!wv || !tab) return;
+    
+    if (tab.isReaderMode) {
+      tab.isReaderMode = false;
+      readerBtn.classList.remove('active');
+      readerBtn.style.color = '';
+      wv.reload();
+    } else {
+      tab.isReaderMode = true;
+      readerBtn.classList.add('active');
+      readerBtn.style.color = 'var(--accent, #6ab04c)';
+      
+      wv.executeJavaScript(`
+        (() => {
+          let bestNode = document.body;
+          const cands = document.querySelectorAll('article, main, [role="main"], .post-content, .article-content, .entry-content');
+          if (cands.length > 0) {
+            bestNode = cands[0];
+          } else {
+            let maxP = 0;
+            document.querySelectorAll('div').forEach(d => {
+              const pCount = d.querySelectorAll('p').length;
+              if (pCount > maxP) { maxP = pCount; bestNode = d; }
+            });
+          }
+          
+          const overlay = document.createElement('div');
+          overlay.id = 'mybrowser-reader-overlay';
+          overlay.style.cssText = 'position:fixed; top:0; left:0; width:100vw; height:100vh; background:#fdfcf8; z-index:2147483647; overflow-y:auto; padding:60px 20px; box-sizing:border-box; color:#222; font-family:Georgia, serif;';
+          
+          const inner = document.createElement('div');
+          inner.style.cssText = 'max-width:700px; margin:0 auto; font-size:21px; line-height:1.7; letter-spacing:0.2px;';
+          
+          const clone = bestNode.cloneNode(true);
+          const bad = ['script', 'style', 'iframe', 'nav', 'footer', 'aside', 'form', '.ad', '.sidebar', '.comments', '[role="complementary"]'];
+          bad.forEach(sel => { clone.querySelectorAll(sel).forEach(el => el.remove()); });
+          
+          const title = document.createElement('h1');
+          title.textContent = document.title;
+          title.style.cssText = 'font-size:2.4em; margin-bottom:30px; font-family:-apple-system, sans-serif; font-weight:800; line-height:1.2; border-bottom:1px solid #eaeaea; padding-bottom:15px;';
+          inner.appendChild(title);
+          
+          clone.querySelectorAll('p').forEach(p => p.style.cssText = 'margin-bottom: 22px; color:#333;');
+          clone.querySelectorAll('h1, h2, h3').forEach(h => h.style.cssText = 'margin-top: 30px; margin-bottom: 15px; font-family:-apple-system, sans-serif; color:#111;');
+          clone.querySelectorAll('img').forEach(img => { img.style.cssText = 'max-width:100%; height:auto; border-radius:8px; margin:20px 0; display:block;'; });
+          clone.querySelectorAll('a').forEach(a => { a.style.color = '#0056b3'; a.style.textDecoration = 'none'; });
+          
+          inner.appendChild(clone);
+          overlay.appendChild(inner);
+          
+          document.body.appendChild(overlay);
+          document.body.style.overflow = 'hidden';
+        })();
+      `);
+    }
+  });
+}
+
+// --- MEDIA HUB LOGIC ---
+function renderMediaHub() {
+  if (!mediaList) return;
+  mediaList.innerHTML = '';
+  let hasMedia = false;
+  
+  if (workspaces && workspaces[currentWorkspaceId]) {
+    const ws = workspaces[currentWorkspaceId];
+    ws.tabs.forEach(tab => {
+      if (tab.hasMedia || tab.isAudible) {
+        hasMedia = true;
+        const wv = webviews[tab.id];
+        const isPlaying = tab.isAudible;
+        
+        const item = document.createElement('div');
+        item.className = 'media-item';
+        
+        const playIcon = `<svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>`;
+        const pauseIcon = `<svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>`;
+        const pipIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><rect x="12" y="14" width="8" height="5"></rect></svg>`;
+        
+        item.innerHTML = `
+          <div>
+            <div class="media-title">${tab.title}</div>
+            <div class="media-url">${tab.url ? new URL(tab.url).hostname : 'Media'}</div>
+          </div>
+          <div class="media-controls">
+            <button class="media-btn" id="mPlay_${tab.id}" title="${isPlaying ? 'Pause' : 'Play'}">
+              ${isPlaying ? pauseIcon : playIcon}
+            </button>
+            <button class="media-btn" id="mPip_${tab.id}" title="Picture in Picture">
+              ${pipIcon}
+            </button>
+          </div>
+        `;
+        mediaList.appendChild(item);
+        
+        item.querySelector(`#mPlay_${tab.id}`).onclick = () => {
+          if (wv) {
+            wv.executeJavaScript(`
+              (() => {
+                const v = document.querySelector('video') || document.querySelector('audio');
+                if (v) { if (v.paused) v.play(); else v.pause(); }
+              })();
+            `);
+            setTimeout(renderMediaHub, 300);
+          }
+        };
+        
+        item.querySelector(`#mPip_${tab.id}`).onclick = () => {
+          if (wv) {
+            wv.executeJavaScript(`
+              (() => {
+                const v = document.querySelector('video');
+                if (v) v.requestPictureInPicture();
+              })();
+            `);
+          }
+        };
+      }
+    });
+  }
+  
+  if (!hasMedia) {
+    mediaList.innerHTML = '<div class="media-empty">No active media sessions</div>';
+  }
+}
+
+if (mediaBtn) {
+  mediaBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if(downloadsMenu) downloadsMenu.classList.remove('visible');
+    if(shieldMenu) shieldMenu.classList.remove('visible');
+    mediaPopup.classList.toggle('visible');
+    if (mediaPopup.classList.contains('visible')) {
+      renderMediaHub();
+    }
+  });
+
+  document.addEventListener('click', (e) => {
+    if (mediaPopup.classList.contains('visible') && !e.target.closest('#mediaPopup') && !e.target.closest('#mediaBtn')) {
+      mediaPopup.classList.remove('visible');
+    }
+  });
+}
 
 // --- DOWNLOADS LOGIC ---
 let activeDownloads = {};
@@ -1049,11 +1359,11 @@ function renderDownloads() {
     downloadsList.innerHTML = '<div class="downloads-empty">No recent downloads</div>';
     return;
   }
-  
+
   dls.forEach(dl => {
     const el = document.createElement('div');
     el.className = `dl-item ${dl.state === 'completed' ? 'done' : dl.state === 'interrupted' ? 'interrupted' : ''}`;
-    
+
     let statusText = dl.state === 'completed' ? 'Done' : dl.state === 'interrupted' ? 'Failed' : `${dl.percent.toFixed(0)}%`;
     let actionBtn = dl.state === 'completed' ? `<button class="dl-action-btn" title="Show in Folder"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg></button>` : '';
 
@@ -1074,7 +1384,7 @@ function renderDownloads() {
       const btn = el.querySelector('.dl-action-btn');
       if (btn) btn.addEventListener('click', () => shell.showItemInFolder(dl.savePath));
     }
-    
+
     downloadsList.appendChild(el);
   });
 }
@@ -1181,7 +1491,7 @@ function updateShieldUI() {
     const wcId = wv.getWebContentsId();
     const data = tabShieldData[wcId] || [];
     shieldBlockCount.textContent = data.length;
-    
+
     shieldBlockList.innerHTML = '';
     const uniqueHosts = [...new Set(data)].slice(0, 50); // display max 50 unique
     if (uniqueHosts.length === 0) {
@@ -1194,15 +1504,15 @@ function updateShieldUI() {
         shieldBlockList.appendChild(el);
       });
     }
-    
+
     if (data.length > 0) {
-       shieldBtn.classList.add('shield-active');
-       shieldBtn.style.color = 'var(--shield-color)';
+      shieldBtn.classList.add('shield-active');
+      shieldBtn.style.color = 'var(--shield-color)';
     } else {
-       shieldBtn.classList.remove('shield-active');
-       shieldBtn.style.color = '';
+      shieldBtn.classList.remove('shield-active');
+      shieldBtn.style.color = '';
     }
-  } catch(e) {}
+  } catch (e) { }
 }
 
 ipcRenderer.on('tracker-blocked', (e, { webContentsId, url }) => {
@@ -1212,17 +1522,17 @@ ipcRenderer.on('tracker-blocked', (e, { webContentsId, url }) => {
   try {
     const host = new URL(url).hostname;
     tabShieldData[webContentsId].unshift(host);
-  } catch(e) {
+  } catch (e) {
     tabShieldData[webContentsId].unshift(url);
   }
-  
+
   const wv = getActiveWebview();
   if (wv && wv.getWebContentsId) {
     try {
       if (wv.getWebContentsId() === webContentsId) {
         updateShieldUI();
       }
-    } catch(err) {}
+    } catch (err) { }
   }
 });
 
@@ -1251,10 +1561,248 @@ async function checkDefaultBrowserStatus() {
   }
 }
 
+async function renderPasswordManager() {
+  if (!passwordManagerList) return;
+  passwordManagerList.innerHTML = '<div style="padding:16px; color:var(--text-secondary); font-size:13px; text-align:center;">Loading secure vault...</div>';
+
+  const vault = await ipcRenderer.invoke('get-all-passwords');
+  passwordManagerList.innerHTML = '';
+
+  if (Object.keys(vault).length === 0) {
+    passwordManagerList.innerHTML = '<div style="padding:16px; color:var(--text-secondary); font-size:13px; text-align:center;">No saved passwords yet.</div>';
+    return;
+  }
+
+  for (const [domain, entries] of Object.entries(vault)) {
+    entries.forEach(entry => {
+      const row = document.createElement('div');
+      row.style.cssText = 'display:flex; justify-content:space-between; align-items:center; padding:12px 16px; border-bottom:1px solid rgba(255,255,255,0.05); color:#fff; font-size:14px;';
+
+      const info = document.createElement('div');
+      info.innerHTML = `<strong>${domain}</strong> <span style="color:var(--text-secondary); font-size:13px; margin-left:8px;">${entry.username}</span>`;
+
+      const delBtn = document.createElement('button');
+      delBtn.className = 'danger-btn';
+      delBtn.style.padding = '4px 8px';
+      delBtn.style.fontSize = '12px';
+      delBtn.textContent = 'Delete';
+      delBtn.onclick = async () => {
+        await ipcRenderer.invoke('delete-password', { domain, username: entry.username });
+        renderPasswordManager(); // refresh
+      };
+
+      row.appendChild(info);
+      row.appendChild(delBtn);
+      passwordManagerList.appendChild(row);
+    });
+  }
+}
+
+async function renderExtensionsManager() {
+  if (!extensionsList) return;
+  extensionsList.innerHTML = '<div style="padding:16px; color:var(--text-secondary); font-size:13px; text-align:center;">Loading extensions...</div>';
+
+  const exts = await ipcRenderer.invoke('get-extensions');
+  extensionsList.innerHTML = '';
+  if (extensionIconsContainer) extensionIconsContainer.innerHTML = '';
+
+  if (exts.length === 0) {
+    extensionsList.innerHTML = '<div style="padding:16px; color:var(--text-secondary); font-size:13px; text-align:center;">No extensions loaded.</div>';
+    return;
+  }
+
+  exts.forEach(ext => {
+    // Settings List Item
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex; justify-content:space-between; align-items:center; padding:12px 16px; background:rgba(255,255,255,0.02); border-radius:8px; color:#fff; font-size:14px; margin-bottom:8px;';
+
+    const info = document.createElement('div');
+    info.innerHTML = `<strong>${ext.name}</strong> <span style="color:var(--text-secondary); font-size:12px; margin-left:8px;">v${ext.version}</span>`;
+
+    const delBtn = document.createElement('button');
+    delBtn.className = 'danger-btn';
+    delBtn.style.padding = '4px 8px';
+    delBtn.style.fontSize = '12px';
+    delBtn.textContent = 'Remove';
+    delBtn.onclick = async () => {
+      await ipcRenderer.invoke('remove-extension', ext.id);
+      renderExtensionsManager();
+    };
+
+    row.appendChild(info);
+    row.appendChild(delBtn);
+    extensionsList.appendChild(row);
+
+    // Top Bar Action Icon
+    if (extensionIconsContainer) {
+      const extIconBtn = document.createElement('button');
+      extIconBtn.className = 'icon-btn';
+      extIconBtn.title = ext.name;
+      extIconBtn.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line></svg>`;
+      extIconBtn.style.color = 'var(--text-primary)';
+      extIconBtn.style.marginRight = '2px';
+
+      if (ext.popup) {
+        extIconBtn.onclick = () => {
+          if (extPopupContainer.style.display === 'block' && extPopupTitle.textContent === ext.name) {
+            extPopupContainer.style.display = 'none';
+          } else {
+            extPopupTitle.textContent = ext.name;
+            extPopupWebview.src = `chrome-extension://${ext.id}/${ext.popup}`;
+            extPopupContainer.style.display = 'block';
+          }
+        };
+      } else {
+        extIconBtn.style.opacity = '0.5';
+        extIconBtn.title = ext.name + ' (No Popup UI)';
+      }
+      extensionIconsContainer.appendChild(extIconBtn);
+    }
+  });
+}
+
+// --- AUTOFILL MANAGER ---
+let autofillProfiles = [];
+let autofillCards = [];
+
+async function renderAutofillManager() {
+  const data = await ipcRenderer.invoke('get-autofill-data');
+  autofillProfiles = data.profiles || [];
+  autofillCards = data.cards || [];
+  
+  const addressList = document.getElementById('addressList');
+  const cardsList = document.getElementById('cardsList');
+  if(!addressList || !cardsList) return;
+  
+  addressList.innerHTML = '';
+  cardsList.innerHTML = '';
+  
+  if (autofillProfiles.length === 0) {
+    addressList.innerHTML = '<div style="color:var(--text-secondary); padding:12px; text-align:center; background:rgba(255,255,255,0.05); border-radius:8px;">No addresses saved yet.</div>';
+  } else {
+    autofillProfiles.forEach(p => {
+      const item = document.createElement('div');
+      item.className = 'list-item';
+      item.innerHTML = `
+        <div style="flex:1;">
+          <div style="font-weight:600; color:#fff;">${p.name || 'Unnamed'}</div>
+          <div style="font-size:12px; color:var(--text-secondary); margin-top:4px;">${p.address || ''} ${p.city ? '- ' + p.city : ''}</div>
+        </div>
+        <button class="icon-btn delete-item-btn" title="Remove" data-id="${p.id}">
+          <svg viewBox="0 0 24 24" fill="none" stroke="#eb5757" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+        </button>
+      `;
+      item.querySelector('.delete-item-btn').onclick = async () => {
+        await ipcRenderer.invoke('delete-autofill-profile', p.id);
+        renderAutofillManager();
+      };
+      addressList.appendChild(item);
+    });
+  }
+  
+  if (autofillCards.length === 0) {
+    cardsList.innerHTML = '<div style="color:var(--text-secondary); padding:12px; text-align:center; background:rgba(255,255,255,0.05); border-radius:8px;">No credit cards saved yet.</div>';
+  } else {
+    autofillCards.forEach(c => {
+      const item = document.createElement('div');
+      item.className = 'list-item';
+      const last4 = c.number ? c.number.slice(-4) : '****';
+      item.innerHTML = `
+        <div style="flex:1;">
+          <div style="font-weight:600; color:#fff;">•••• •••• •••• ${last4}</div>
+          <div style="font-size:12px; color:var(--text-secondary); margin-top:4px;">${c.nameOnCard || 'Unknown'} | Exp: ${c.expMonth || '--'}/${c.expYear || '--'}</div>
+        </div>
+        <button class="icon-btn delete-card-btn" title="Remove" data-id="${c.id}">
+          <svg viewBox="0 0 24 24" fill="none" stroke="#eb5757" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+        </button>
+      `;
+      item.querySelector('.delete-card-btn').onclick = async () => {
+        await ipcRenderer.invoke('delete-autofill-card', c.id);
+        renderAutofillManager();
+      };
+      cardsList.appendChild(item);
+    });
+  }
+}
+
+// Modal handling
+const autofillModal = document.getElementById('autofillModal');
+const autofillModalTitle = document.getElementById('autofillModalTitle');
+const autofillModalFields = document.getElementById('autofillModalFields');
+const autofillCancelBtn = document.getElementById('autofillCancelBtn');
+const autofillSaveBtn = document.getElementById('autofillSaveBtn');
+let currentAutofillType = null;
+
+if (autofillCancelBtn) {
+  autofillCancelBtn.onclick = () => { autofillModal.style.display = 'none'; };
+}
+
+if (document.getElementById('addAddressBtn')) {
+  document.getElementById('addAddressBtn').onclick = () => {
+    currentAutofillType = 'profile';
+    autofillModalTitle.textContent = 'Add Profile/Address';
+    autofillModalFields.innerHTML = `
+      <input type="text" id="af_name" placeholder="Full Name (e.g. John Doe)" style="padding:10px; background:rgba(0,0,0,0.2); border:1px solid #333; border-radius:6px; color:#fff; width:100%;">
+      <input type="text" id="af_email" placeholder="Email" style="padding:10px; background:rgba(0,0,0,0.2); border:1px solid #333; border-radius:6px; color:#fff; width:100%;">
+      <input type="text" id="af_phone" placeholder="Phone Number" style="padding:10px; background:rgba(0,0,0,0.2); border:1px solid #333; border-radius:6px; color:#fff; width:100%;">
+      <input type="text" id="af_address" placeholder="Address" style="padding:10px; background:rgba(0,0,0,0.2); border:1px solid #333; border-radius:6px; color:#fff; width:100%;">
+      <input type="text" id="af_city" placeholder="City" style="padding:10px; background:rgba(0,0,0,0.2); border:1px solid #333; border-radius:6px; color:#fff; width:100%;">
+      <input type="text" id="af_zip" placeholder="ZIP / Postal Code" style="padding:10px; background:rgba(0,0,0,0.2); border:1px solid #333; border-radius:6px; color:#fff; width:100%;">
+    `;
+    autofillModal.style.display = 'flex';
+  };
+}
+
+if (document.getElementById('addCardBtn')) {
+  document.getElementById('addCardBtn').onclick = () => {
+    currentAutofillType = 'card';
+    autofillModalTitle.textContent = 'Add Credit Card';
+    autofillModalFields.innerHTML = `
+      <input type="text" id="af_nameOnCard" placeholder="Name on Card" style="padding:10px; background:rgba(0,0,0,0.2); border:1px solid #333; border-radius:6px; color:#fff; width:100%;">
+      <input type="text" id="af_number" placeholder="Card Number (No spaces needed)" style="padding:10px; background:rgba(0,0,0,0.2); border:1px solid #333; border-radius:6px; color:#fff; width:100%;">
+      <div style="display:flex; gap:8px;">
+        <input type="text" id="af_expMonth" placeholder="MM" style="padding:10px; background:rgba(0,0,0,0.2); border:1px solid #333; border-radius:6px; color:#fff; flex:1;">
+        <input type="text" id="af_expYear" placeholder="YY" style="padding:10px; background:rgba(0,0,0,0.2); border:1px solid #333; border-radius:6px; color:#fff; flex:1;">
+      </div>
+    `;
+    autofillModal.style.display = 'flex';
+  };
+}
+
+if (autofillSaveBtn) {
+  autofillSaveBtn.onclick = async () => {
+    if (currentAutofillType === 'profile') {
+      const p = {
+        name: document.getElementById('af_name').value.trim(),
+        email: document.getElementById('af_email').value.trim(),
+        phone: document.getElementById('af_phone').value.trim(),
+        address: document.getElementById('af_address').value.trim(),
+        city: document.getElementById('af_city').value.trim(),
+        zip: document.getElementById('af_zip').value.trim()
+      };
+      await ipcRenderer.invoke('save-autofill-profile', p);
+    } else if (currentAutofillType === 'card') {
+      const c = {
+        nameOnCard: document.getElementById('af_nameOnCard').value.trim(),
+        number: document.getElementById('af_number').value.replace(/\s+/g, ''),
+        expMonth: document.getElementById('af_expMonth').value.trim(),
+        expYear: document.getElementById('af_expYear').value.trim()
+      };
+      if (!c.number) return;
+      await ipcRenderer.invoke('save-autofill-card', c);
+    }
+    autofillModal.style.display = 'none';
+    renderAutofillManager();
+  };
+}
+
 if (settingsBtn) {
   settingsBtn.addEventListener('click', () => {
     loadSettingsToUI();
     checkDefaultBrowserStatus();
+    renderPasswordManager();
+    renderExtensionsManager();
+    renderAutofillManager();
     settingsPage.classList.add('active');
   });
 }
@@ -1347,7 +1895,7 @@ if (makeDefaultBtn) {
 // Downloads Location Logic
 if (settingAskDownload) {
   settingAskDownload.addEventListener('change', (e) => {
-    if (!settings.downloads) settings.downloads = {path: '', askEveryTime: false};
+    if (!settings.downloads) settings.downloads = { path: '', askEveryTime: false };
     settings.downloads.askEveryTime = e.target.checked;
     saveSession();
   });
@@ -1357,7 +1905,7 @@ if (changeDownloadPathBtn) {
   changeDownloadPathBtn.addEventListener('click', async () => {
     const folderPath = await ipcRenderer.invoke('select-download-folder');
     if (folderPath) {
-      if (!settings.downloads) settings.downloads = {path: '', askEveryTime: false};
+      if (!settings.downloads) settings.downloads = { path: '', askEveryTime: false };
       settings.downloads.path = folderPath;
       if (settingDownloadPath) settingDownloadPath.value = folderPath;
       saveSession();
@@ -1365,7 +1913,108 @@ if (changeDownloadPathBtn) {
   });
 }
 
+// --- PASSWORD MANAGER LOGIC ---
+ipcRenderer.on('show-password-prompt', (event, payload) => {
+  if (isIncognito) return; // Never save passwords in incognito
+  if (passwordPrompt) {
+    pendingPasswordData = payload;
+    pwdPromptDomain.textContent = payload.domain;
+    pwdPromptUser.textContent = payload.username;
+    passwordPrompt.style.display = 'flex';
+  }
+});
+
+if (pwdPromptSave) {
+  pwdPromptSave.addEventListener('click', async () => {
+    if (pendingPasswordData) {
+      const success = await ipcRenderer.invoke('save-password', pendingPasswordData);
+      if (success) {
+        showStatus('Password securely saved.');
+      } else {
+        showStatus('Error saving password (Encryption failed)');
+      }
+    }
+    passwordPrompt.style.display = 'none';
+    pendingPasswordData = null;
+  });
+}
+
+if (pwdPromptNever) {
+  pwdPromptNever.addEventListener('click', () => {
+    passwordPrompt.style.display = 'none';
+    pendingPasswordData = null;
+  });
+}
+
+// --- EXTENSIONS LOGIC ---
+if (closeExtPopupBtn) {
+  closeExtPopupBtn.addEventListener('click', () => {
+    if (extPopupContainer) extPopupContainer.style.display = 'none';
+    if (extPopupWebview) extPopupWebview.src = 'about:blank';
+  });
+}
+
+if (installCrxBtn) {
+  installCrxBtn.addEventListener('click', async () => {
+    let raw = crxIdInput.value.trim();
+    if (!raw) return;
+    
+    let extId = raw;
+    const match = raw.match(/([a-z]{32})/);
+    if (match) extId = match[1];
+    
+    installCrxBtn.disabled = true;
+    const originalText = installCrxBtn.textContent;
+    installCrxBtn.textContent = 'Installing...';
+    
+    const result = await ipcRenderer.invoke('install-chrome-extension', extId);
+    
+    installCrxBtn.disabled = false;
+    installCrxBtn.textContent = originalText;
+    
+    if (result && result.success) {
+      crxIdInput.value = '';
+      showStatus(`Installed Extension: ${result.name}`);
+      renderExtensionsManager();
+    } else {
+      showStatus(`Error: ${result ? result.error : 'Network Issue'}`);
+    }
+  });
+}
+
+if (loadExtensionBtn) {
+  loadExtensionBtn.addEventListener('click', async () => {
+    const result = await ipcRenderer.invoke('load-unpacked-extension');
+    if (result && !result.error) {
+      showStatus(`Loaded Extension: ${result.name}`);
+      renderExtensionsManager();
+    } else if (result && result.error) {
+      showStatus(`Error: ${result.error}`);
+    }
+  });
+}
+
+// --- KEYBOARD SHORTCUTS ---
+window.addEventListener('keydown', (e) => {
+  const isCmdOrCtrl = e.metaKey || e.ctrlKey;
+  if (isCmdOrCtrl && e.shiftKey && e.key.toLowerCase() === 'n') {
+    e.preventDefault();
+    ipcRenderer.send('open-incognito-window');
+  } else if (isCmdOrCtrl && !e.shiftKey && e.key.toLowerCase() === 'n') {
+    e.preventDefault();
+    ipcRenderer.send('open-new-window');
+  } else if (isCmdOrCtrl && !e.shiftKey && e.key.toLowerCase() === 't') {
+    e.preventDefault();
+    createTab();
+  }
+});
+
+ipcRenderer.on('keyboard-shortcut-new-tab', () => {
+  createTab();
+});
+
 // === INITIALIZE APP ===
 loadSession();
 ipcRenderer.send('update-shield-mode', settings.shieldMode || 'standard');
 renderStartPage();
+renderExtensionsManager();

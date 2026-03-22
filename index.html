@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -9,103 +10,90 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 </head>
+
 <body>
-
-  <!-- START PAGE OVERLAY -->
-  <div class="start-page active" id="startPage">
-    <div class="start-drag-header"></div> <!-- macOS Window Controls Padding -->
-    
-    <div class="start-container">
-      <div class="start-main-content">
-        
-        <!-- Favorites Section -->
-        <div class="section-header">
-          <h2>Favorites</h2>
-        </div>
-        <div class="favorites-grid" id="favoritesGrid">
-          <!-- Populated by JS -->
-        </div>
-
-        <!-- Workspaces Section -->
-        <div class="section-header mt-40">
-          <h2>Your Workspaces</h2>
-        </div>
-        <div class="start-ws-grid" id="startWsGrid">
-           <!-- Populated by JS -->
-        </div>
-        
-        <div class="continue-ws-container">
-           <button class="glass-btn primary" id="continueWsBtn">Continue Session</button>
-        </div>
-
-      </div>
-      
-      <!-- Bottom Search -->
-      <div class="start-bottom-search">
-        <div class="glass-search-box">
-           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
-           <input type="text" id="startSearchInput" placeholder="Search or enter website" spellcheck="false" />
-        </div>
-      </div>
-    </div>
-  </div>
 
   <div class="app-container">
     <!-- Top Chrome Layer -->
     <header class="browser-chrome">
-      
+
       <!-- Row 1: Workspaces and Tabs -->
       <div class="tab-row">
         <!-- macOS Window Controls Spacing -->
         <div class="mac-traffic-lights-spacer"></div>
-        
+
         <!-- Workspace Switcher (Left) -->
         <div class="workspace-btn" id="workspaceBtn" title="Switch Workspace">
           <div class="workspace-dot" style="background: #5e6ad2"></div>
           <span id="workspaceLabel">Personal</span>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="ws-chevron"><polyline points="6 9 12 15 18 9"></polyline></svg>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+            stroke-linejoin="round" class="ws-chevron">
+            <polyline points="6 9 12 15 18 9"></polyline>
+          </svg>
         </div>
 
         <!-- Tab Strip -->
         <div class="tab-list" id="tabBar">
           <!-- Tabs injected by JavaScript -->
         </div>
-        
+
         <button id="newTabBtn" class="new-tab-btn" title="New Tab">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="12" y1="5" x2="12" y2="19"></line>
+            <line x1="5" y1="12" x2="19" y2="12"></line>
+          </svg>
         </button>
       </div>
 
       <!-- Row 2: Toolbar (Nav, URL, Right Controls) -->
       <div class="toolbar-row">
-        
+
         <!-- Left Nav -->
         <div class="nav-actions">
           <button id="backBtn" class="icon-btn" title="Back">
-             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+              stroke-linejoin="round">
+              <polyline points="15 18 9 12 15 6"></polyline>
+            </svg>
           </button>
           <button id="forwardBtn" class="icon-btn" title="Forward">
-             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+              stroke-linejoin="round">
+              <polyline points="9 18 15 12 9 6"></polyline>
+            </svg>
           </button>
           <button id="refreshBtn" class="icon-btn" title="Refresh">
-             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+              stroke-linejoin="round">
+              <polyline points="23 4 23 10 17 10"></polyline>
+              <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
+            </svg>
           </button>
           <button id="homeBtn" class="icon-btn" title="Home (google.ca)">
-             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+              stroke-linejoin="round">
+              <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
+              <polyline points="9 22 9 12 15 12 15 22"></polyline>
+            </svg>
           </button>
         </div>
 
         <!-- Center URL -->
         <div class="url-bar-wrapper" style="position: relative;">
           <button id="shieldBtn" class="privacy-shield shield-active" title="Privacy Shield Active">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+              stroke-linejoin="round">
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+            </svg>
           </button>
 
           <!-- Privacy Shield Popover -->
           <div id="shieldMenu" class="shield-popover">
             <div class="shield-header">
               <div class="shield-title">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+                </svg>
                 <span>Shields are UP</span>
               </div>
               <div class="shield-toggle active" id="shieldToggle">
@@ -122,17 +110,54 @@
           </div>
 
           <input id="urlInput" type="text" placeholder="Search or type a URL" spellcheck="false" />
+          <button class="icon-btn" id="readerBtn" title="Reader View">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20"></path>
+            </svg>
+          </button>
           <button class="icon-btn bookmark-btn" title="Bookmark Page">
-             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+              stroke-linejoin="round">
+              <polygon
+                points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2">
+              </polygon>
+            </svg>
           </button>
         </div>
 
         <!-- Right Controls -->
         <div class="right-controls" style="position: relative;">
-          <button class="icon-btn" id="downloadsBtn" title="Downloads">
-             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+          <!-- Active Extensions Area -->
+          <div id="extensionIconsContainer" style="display:flex; gap:4px; align-items:center; margin-right:8px;">
+            <!-- Rendered by JS -->
+          </div>
+
+          <!-- Media Hub Button -->
+          <button class="icon-btn" id="mediaBtn" title="Media Controls">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18V5l12-2v13"></path><circle cx="6" cy="18" r="3"></circle><circle cx="18" cy="16" r="3"></circle></svg>
           </button>
-          
+
+          <!-- Incognito Permanent Indicator -->
+          <div class="incognito-badge" title="Incognito Mode Active">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+              stroke-linejoin="round" style="width:14px;height:14px;">
+              <path
+                d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24">
+              </path>
+              <line x1="1" y1="1" x2="23" y2="23"></line>
+            </svg>
+            Incognito
+          </div>
+
+          <button class="icon-btn" id="downloadsBtn" title="Downloads">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+              stroke-linejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+              <polyline points="7 10 12 15 17 10"></polyline>
+              <line x1="12" y1="15" x2="12" y2="3"></line>
+            </svg>
+          </button>
+
           <!-- Downloads Popover -->
           <div id="downloadsMenu" class="downloads-popover">
             <div class="downloads-header">
@@ -143,30 +168,64 @@
               <div class="downloads-empty">No recent downloads</div>
             </div>
           </div>
+
+          <!-- Media Hub Popover -->
+          <div class="media-hub-popup" id="mediaPopup">
+            <div id="mediaList">
+              <div class="media-empty">No media playing</div>
+            </div>
+          </div>
+          <button class="icon-btn" id="incognitoBtn" title="New Incognito Window">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+              stroke-linejoin="round">
+              <path
+                d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24">
+              </path>
+              <line x1="1" y1="1" x2="23" y2="23"></line>
+            </svg>
+          </button>
           <button class="icon-btn" title="Sync Profile">
-             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+              stroke-linejoin="round">
+              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+              <circle cx="12" cy="7" r="4"></circle>
+            </svg>
           </button>
           <button class="icon-btn" title="Settings">
-             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+              stroke-linejoin="round">
+              <circle cx="12" cy="12" r="3"></circle>
+              <path
+                d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z">
+              </path>
+            </svg>
           </button>
         </div>
       </div>
     </header>
 
     <!-- Context & Dropdown Menus (Glassmorphic) -->
-    
+
     <!-- Tab Context Menu -->
     <div id="tabContextMenu" class="context-menu">
       <div class="menu-item" id="lockTabAction">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+          stroke-linejoin="round">
+          <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+          <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+        </svg>
         <span>Lock Tab</span>
       </div>
       <div class="menu-item disabled" id="closeTabAction">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+          stroke-linejoin="round">
+          <line x1="18" y1="6" x2="6" y2="18"></line>
+          <line x1="6" y1="6" x2="18" y2="18"></line>
+        </svg>
         <span>Close Tab</span>
       </div>
     </div>
-    
+
     <!-- Workspace Menu -->
     <div id="workspaceMenu" class="context-menu dropdown-menu">
       <div class="ws-list-container" id="workspaceList">
@@ -174,7 +233,10 @@
       </div>
       <div class="menu-separator"></div>
       <div class="menu-item add-ws-item" id="addWorkspaceBtn">
-         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg> New Workspace
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <line x1="12" y1="5" x2="12" y2="19"></line>
+          <line x1="5" y1="12" x2="19" y2="12"></line>
+        </svg> New Workspace
       </div>
     </div>
 
@@ -186,15 +248,96 @@
         <span id="findMatchCount" class="find-count">0/0</span>
         <div class="find-separator"></div>
         <div class="find-actions">
-          <button id="findPrevBtn" class="icon-btn" title="Previous"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"></polyline></svg></button>
-          <button id="findNextBtn" class="icon-btn" title="Next"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg></button>
-          <button id="findCloseBtn" class="icon-btn" title="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></button>
+          <button id="findPrevBtn" class="icon-btn" title="Previous"><svg viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="18 15 12 9 6 15"></polyline>
+            </svg></button>
+          <button id="findNextBtn" class="icon-btn" title="Next"><svg viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="6 9 12 15 18 9"></polyline>
+            </svg></button>
+          <button id="findCloseBtn" class="icon-btn" title="Close"><svg viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="18" y1="6" x2="6" y2="18"></line>
+              <line x1="6" y1="6" x2="18" y2="18"></line>
+            </svg></button>
         </div>
       </div>
       <div class="browser-wrapper" id="browserViewsContainer">
-         <!-- Isolated <webview> elements will be dynamically injected here for every tab -->
+        
+        <!-- START PAGE OVERLAY (MOVED HERE) -->
+        <div class="start-page active" id="startPage">
+          <div class="start-container">
+            <div class="start-main-content">
+
+              <!-- Favorites Section -->
+              <div class="section-header">
+                <h2>Favorites</h2>
+              </div>
+              <div class="favorites-grid" id="favoritesGrid">
+                <!-- Populated by JS -->
+              </div>
+
+              <!-- Workspaces Section -->
+              <div class="section-header mt-40">
+                <h2>Your Workspaces</h2>
+              </div>
+              <div class="start-ws-grid" id="startWsGrid">
+                <!-- Populated by JS -->
+              </div>
+
+              <div class="continue-ws-container">
+                <button class="glass-btn primary" id="continueWsBtn">Continue Session</button>
+              </div>
+
+            </div>
+
+            <!-- Bottom Search -->
+            <div class="start-bottom-search">
+              <div class="glass-search-box">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="11" cy="11" r="8"></circle>
+                  <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                </svg>
+                <input type="text" id="startSearchInput" placeholder="Search or enter website" spellcheck="false" />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Isolated <webview> elements will be dynamically injected here for every tab -->
       </div>
-      <!-- Status Overlay -->
+    
+    <!-- EXTENSION POPUP OVERLAY -->
+    <div id="extPopupContainer" style="display:none; position:absolute; top:60px; right:60px; width:350px; height:500px; background:var(--menu-bg); border-radius:12px; box-shadow:0 10px 30px rgba(0,0,0,0.5); z-index:9999; overflow:hidden; border:1px solid var(--chrome-border);">
+      <!-- A hidden header we can use for native drag or close if needed -->
+      <div style="height:32px; background:rgba(255,255,255,0.05); display:flex; justify-content:space-between; align-items:center; padding:0 8px;">
+        <span id="extPopupTitle" style="font-size:12px; color:#aaa; font-weight:500;">Extension</span>
+        <button id="closeExtPopupBtn" class="text-btn" style="padding:0 8px; font-size:16px;">&times;</button>
+      </div>
+      <webview id="extPopupWebview" style="width:100%; height:calc(100% - 32px); background:#fff;"></webview>
+    </div>
+
+    <!-- ADD PASSWORD PROMPT DIALOG HERE -->
+      <div id="passwordPrompt" class="password-prompt" style="display:none;">
+        <div class="pwd-prompt-header">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px">
+            <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+            <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+          </svg>
+          Save password?
+        </div>
+        <div class="pwd-prompt-body">
+          <strong id="pwdPromptDomain">example.com</strong>
+          <span id="pwdPromptUser">user@example.com</span>
+        </div>
+        <div class="pwd-prompt-actions">
+          <button id="pwdPromptNever" class="danger-btn" style="padding:6px 12px; font-size:12px;">Never</button>
+          <button id="pwdPromptSave" class="primary-btn" style="padding:6px 12px; font-size:12px;">Save</button>
+        </div>
+      </div>
+
+      <!-- MAIN VIEWS CONTAINER -->
       <div id="status" class="status-overlay">Ready</div>
     </main>
   </div>
@@ -207,7 +350,10 @@
         <button class="panel-tab" id="tabBookmarks">Bookmarks</button>
       </div>
       <button class="icon-btn close-panel-btn" id="closeSidePanelBtn" title="Close Panel">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <line x1="18" y1="6" x2="6" y2="18"></line>
+          <line x1="6" y1="6" x2="18" y2="18"></line>
+        </svg>
       </button>
     </div>
     <div class="panel-content" id="panelContent"></div>
@@ -216,41 +362,79 @@
   <!-- Settings Page Overlay -->
   <div id="settingsPage" class="settings-page">
     <div class="settings-container-app">
-      
+
       <!-- Left Sidebar -->
       <div class="settings-sidebar">
         <div class="settings-sidebar-header">Settings</div>
         <div class="settings-nav">
           <button class="settings-nav-btn active" data-section="appearance">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"></path><path d="M2 12h20"></path></svg> Appearance
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10"></circle>
+              <path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"></path>
+              <path d="M2 12h20"></path>
+            </svg> Appearance
           </button>
           <button class="settings-nav-btn" data-section="search">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg> Search Engine
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="11" cy="11" r="8"></circle>
+              <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+            </svg> Search Engine
           </button>
           <button class="settings-nav-btn" data-section="startup">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg> On Startup
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
+              <polyline points="9 22 9 12 15 12 15 22"></polyline>
+            </svg> On Startup
           </button>
           <button class="settings-nav-btn" data-section="default-browser">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="12" y1="17" x2="12" y2="21"></line></svg> Default Browser
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
+              <line x1="8" y1="21" x2="16" y2="21"></line>
+              <line x1="12" y1="17" x2="12" y2="21"></line>
+            </svg> Default Browser
           </button>
           <button class="settings-nav-btn" data-section="privacy">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg> Privacy & Security
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+              <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+            </svg> Privacy & Security
+          </button>
+          <button class="settings-nav-btn" data-section="passwords">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path
+                d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4">
+              </path>
+            </svg> Passwords
+          </button>
+          <button class="settings-nav-btn" data-section="autofill">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg> Autofill & Payments
+          </button>
+          <button class="settings-nav-btn" data-section="extensions">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line></svg> Extensions
           </button>
           <button class="settings-nav-btn" data-section="downloads">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg> Downloads
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+              <polyline points="7 10 12 15 17 10"></polyline>
+              <line x1="12" y1="15" x2="12" y2="3"></line>
+            </svg> Downloads
           </button>
         </div>
       </div>
-      
+
       <!-- Right Content Area -->
       <div class="settings-main-area">
         <div class="settings-header">
           <h2 id="settingsActiveTitle">Appearance</h2>
-          <button id="closeSettingsBtn" class="icon-btn" style="background:transparent;border:none;cursor:pointer;"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#fff" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></button>
+          <button id="closeSettingsBtn" class="icon-btn" style="background:transparent;border:none;cursor:pointer;"><svg
+              viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#fff" stroke-width="2">
+              <line x1="18" y1="6" x2="6" y2="18"></line>
+              <line x1="6" y1="6" x2="18" y2="18"></line>
+            </svg></button>
         </div>
-        
+
         <div class="settings-content" id="settingsContentArea">
-          
+
           <!-- Appearance Section -->
           <div class="settings-pane active" id="sec-appearance">
             <div class="settings-section">
@@ -275,7 +459,7 @@
               </select>
             </div>
           </div>
-          
+
           <!-- Search Section -->
           <div class="settings-pane" id="sec-search">
             <div class="settings-section">
@@ -298,7 +482,8 @@
                 <option value="start-page">Open the dynamic Start Page</option>
                 <option value="custom">Load a custom URL</option>
               </select>
-              <input type="text" id="settingHomepageUrl" class="settings-input" placeholder="e.g. https://github.com" style="margin-top:12px;" />
+              <input type="text" id="settingHomepageUrl" class="settings-input" placeholder="e.g. https://github.com"
+                style="margin-top:12px;" />
             </div>
           </div>
 
@@ -309,7 +494,8 @@
               <p>Make Premium Browser the default application for opening web links.</p>
               <div style="display:flex; align-items:center; gap: 16px; margin-top: 12px;">
                 <button id="makeDefaultBtn" class="primary-btn" style="padding: 10px 20px;">Make default</button>
-                <span id="defaultBrowserStatus" style="font-size: 13px; color: var(--text-secondary);">Checking status...</span>
+                <span id="defaultBrowserStatus" style="font-size: 13px; color: var(--text-secondary);">Checking
+                  status...</span>
               </div>
             </div>
           </div>
@@ -323,25 +509,28 @@
                 <option value="standard">Standard (Blocks known trackers & ads)</option>
                 <option value="strict">Strict (Aggressive blocking, may break some sites)</option>
               </select>
-              <p style="color: var(--shield-color); font-size: 13px;">🛡️ The built-in Privacy Shield is active globally across all websites, terminating trackers silently before they load.</p>
+              <p style="color: var(--shield-color); font-size: 13px;">🛡️ The built-in Privacy Shield is active globally
+                across all websites, terminating trackers silently before they load.</p>
             </div>
             <div class="settings-section danger-zone">
               <h3>Clear Browsing Data</h3>
-              <p>Wipes out all local browser data including your workspaces' histories. This action cannot be undone.</p>
+              <p>Wipes out all local browser data including your workspaces' histories. This action cannot be undone.
+              </p>
               <div style="display:flex; gap:12px; margin-top:20px;">
                 <button id="clearHistoryBtn" class="danger-btn">Clear Browsing History</button>
                 <button id="clearBookmarksBtn" class="danger-btn">Clear All Bookmarks</button>
               </div>
             </div>
           </div>
-          
+
           <!-- Downloads Section -->
           <div class="settings-pane" id="sec-downloads">
             <div class="settings-section">
               <h3>Download Location</h3>
               <p>Choose where downloaded files are saved by default.</p>
               <div style="display:flex; align-items:center; gap: 12px; margin-bottom: 24px;">
-                <input type="text" id="settingDownloadPath" class="settings-input" readonly placeholder="System Default" style="flex:1; cursor:pointer;" />
+                <input type="text" id="settingDownloadPath" class="settings-input" readonly placeholder="System Default"
+                  style="flex:1; cursor:pointer;" />
                 <button id="changeDownloadPathBtn" class="primary-btn" style="padding: 10px 20px;">Change</button>
               </div>
               <label class="settings-toggle">
@@ -351,7 +540,72 @@
               </label>
             </div>
           </div>
+
+          <!-- Passwords Section -->
+          <div class="settings-pane" id="sec-passwords">
+            <div class="settings-section">
+              <h3>Saved Passwords</h3>
+              <p>Your passwords are encrypted securely using military-grade OS encryption.</p>
+              <div id="passwordManagerList"
+                style="margin-top:16px; background:rgba(0,0,0,0.2); border-radius:8px; width:100%;">
+                <!-- Manager via JS -->
+              </div>
+            </div>
+          </div>
           
+          <!-- Extensions Section -->
+          <div class="settings-pane" id="sec-extensions">
+            <div class="settings-section">
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 8px;">
+                <div>
+                  <h3>Chrome Extensions</h3>
+                  <p>Install directly from Chrome Web Store or load unpacked source files.</p>
+                </div>
+              </div>
+              
+              <div style="display:flex; gap:8px; margin-bottom:16px;">
+                <input type="text" id="crxIdInput" placeholder="Paste Chrome Web Store URL or Ext ID here..." style="flex:1; padding:10px 14px; background:rgba(0,0,0,0.2); border:1px solid var(--chrome-border); border-radius:8px; color:#fff; outline:none;" />
+                <button class="primary-btn" id="installCrxBtn" style="padding:10px 16px;">Auto Install</button>
+                <button class="glass-btn" id="loadExtensionBtn" style="padding:10px 16px;">Load Folder</button>
+              </div>
+
+              <div id="extensionsList" style="display:flex; flex-direction:column; gap:8px;">
+                <!-- Manager via JS -->
+              </div>
+            </div>
+          </div>
+          
+          <!-- Autofill Section -->
+          <div class="settings-pane" id="sec-autofill">
+            <div class="settings-section">
+              <div style="display:flex; justify-content:space-between; align-items:center;">
+                <div><h3>Addresses & Contact Info</h3></div>
+                <button class="primary-btn" id="addAddressBtn">Add Address</button>
+              </div>
+              <div id="addressList" style="margin-top:16px; display:flex; flex-direction:column; gap:12px;"></div>
+            </div>
+            
+            <div class="settings-section" style="margin-top:32px;">
+              <div style="display:flex; justify-content:space-between; align-items:center;">
+                <div><h3>Payment Methods</h3></div>
+                <button class="primary-btn" id="addCardBtn">Add Credit Card</button>
+              </div>
+              <div id="cardsList" style="margin-top:16px; display:flex; flex-direction:column; gap:12px;"></div>
+            </div>
+          </div>
+          
+        </div>
+      </div>
+
+      <!-- Generic Settings Modal (Autofill inputs) -->
+      <div id="autofillModal" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.8); z-index:99999; align-items:center; justify-content:center;">
+        <div style="background:var(--menu-bg); border:1px solid var(--chrome-border); border-radius:12px; width:400px; padding:24px;">
+          <h3 id="autofillModalTitle" style="margin-top:0;">Add Entry</h3>
+          <div id="autofillModalFields" style="display:flex; flex-direction:column; gap:12px; margin-top:16px;"></div>
+          <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:24px;">
+            <button class="glass-btn" id="autofillCancelBtn">Cancel</button>
+            <button class="primary-btn" id="autofillSaveBtn">Save</button>
+          </div>
         </div>
       </div>
 
@@ -360,4 +614,5 @@
 
   <script src="assets/js/renderer.js"></script>
 </body>
+
 </html>
