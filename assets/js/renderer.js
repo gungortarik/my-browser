@@ -20,6 +20,10 @@ const workspaceMenu = document.getElementById('workspaceMenu');
 const workspaceBtn = document.getElementById('workspaceBtn');
 const lockTabAction = document.getElementById('lockTabAction');
 const closeTabAction = document.getElementById('closeTabAction');
+const duplicateTabAction = document.getElementById('duplicateTabAction');
+const reopenTabAction = document.getElementById('reopenTabAction');
+const pinTabAction = document.getElementById('pinTabAction');
+const pinTabLabel = document.getElementById('pinTabLabel');
 const addWorkspaceBtn = document.getElementById('addWorkspaceBtn');
 const workspaceList = document.getElementById('workspaceList');
 
@@ -103,6 +107,33 @@ const extPopupTitle = document.getElementById('extPopupTitle');
 const crxIdInput = document.getElementById('crxIdInput');
 const installCrxBtn = document.getElementById('installCrxBtn');
 
+// --- SITE INFO & PERMISSIONS DOM ---
+const siteInfoBtn = document.getElementById('siteInfoBtn');
+const siteInfoMenu = document.getElementById('siteInfoMenu');
+const siteInfoDomain = document.getElementById('siteInfoDomain');
+const siteInfoSecurity = document.getElementById('siteInfoSecurity');
+const sitePermList = document.getElementById('sitePermList');
+const resetSitePermsBtn = document.getElementById('resetSitePermsBtn');
+
+// --- CLOUD SYNC DOM ---
+const userBtn = document.getElementById('userBtn');
+const syncBadge = document.getElementById('syncBadge');
+const authModal = document.getElementById('authModal');
+const closeAuthBtn = document.getElementById('closeAuthBtn');
+const authEmail = document.getElementById('authEmail');
+const authPass = document.getElementById('authPass');
+const authSubmitBtn = document.getElementById('authSubmitBtn');
+const authForm = document.getElementById('authForm');
+const authProfile = document.getElementById('authProfile');
+const profileEmail = document.getElementById('profileEmail');
+const syncNowBtn = document.getElementById('syncNowBtn');
+const signOutBtn = document.getElementById('signOutBtn');
+const authStatusText = document.getElementById('authStatusText');
+const lastSyncTime = document.getElementById('lastSyncTime');
+
+let syncUser = JSON.parse(localStorage.getItem('syncUser')) || null;
+let lastSyncTimestamp = localStorage.getItem('lastSyncTimestamp') || null;
+
 // --- APP STATE ---
 const appDataPath = process.platform === 'win32'
   ? path.join(process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming'), 'PremiumBrowser')
@@ -143,8 +174,10 @@ const DEFAULT_SETTINGS = {
 const urlParams = new URLSearchParams(window.location.search);
 const isIncognito = urlParams.get('incognito') === 'true';
 
+const incognitoBadge = document.getElementById('incognitoBadge');
 if (isIncognito) {
   document.body.classList.add('incognito-theme');
+  if (incognitoBadge) incognitoBadge.style.display = 'flex';
 }
 
 const incognitoBtn = document.getElementById('incognitoBtn');
@@ -159,7 +192,7 @@ let isSplitting = false;
 let workspaces = { ...DEFAULT_WORKSPACES };
 let workspaceOrder = ['ws_personal', 'ws_work'];
 let currentWorkspaceId = 'ws_personal';
-let favorites = [...DEFAULT_FAVORITES];
+let favorites = JSON.parse(localStorage.getItem('favorites')) || [...DEFAULT_FAVORITES];
 let settings = JSON.parse(JSON.stringify(DEFAULT_SETTINGS));
 
 // History and Bookmarks state
@@ -178,11 +211,11 @@ const iconLock = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" str
 
 // --- PERSISTENCE MODULE (FS JSON) ---
 let saveTimeout = null;
-function saveSession() {
+function saveSession(force = false) {
   if (isIncognito || appMode === 'temporary') return;
   clearTimeout(saveTimeout);
 
-  saveTimeout = setTimeout(() => {
+  const performSave = () => {
     const persistentWorkspaces = { ...workspaces };
     if (persistentWorkspaces['ws_temp']) delete persistentWorkspaces['ws_temp'];
 
@@ -202,40 +235,118 @@ function saveSession() {
     };
 
     try {
+      // Create a backup first for atomic-like safety
+      if (fs.existsSync(sessionFilePath)) {
+        fs.copyFileSync(sessionFilePath, `${sessionFilePath}.bak`);
+      }
       fs.writeFileSync(sessionFilePath, JSON.stringify(data, null, 2), 'utf8');
       ipcRenderer.send('update-download-settings', settings.downloads || { askEveryTime: false, path: '' });
     } catch (err) {
       console.error('Failed to save session to disk:', err);
     }
-  }, 300);
+  };
+
+  if (force) {
+    performSave();
+  } else {
+    saveTimeout = setTimeout(performSave, 300);
+  }
 }
 
+// Ensure session is saved on app close
+window.addEventListener('beforeunload', () => {
+  saveSession(true);
+});
+
 function loadSession() {
-  if (fs.existsSync(sessionFilePath)) {
+  const tryLoad = (filePath) => {
+    if (!fs.existsSync(filePath)) return null;
     try {
-      const stored = fs.readFileSync(sessionFilePath, 'utf8');
-      const parsed = JSON.parse(stored);
-      if (parsed.workspaces && Object.keys(parsed.workspaces).length > 0) {
-        workspaces = parsed.workspaces;
-        workspaceOrder = parsed.workspaceOrder || Object.keys(parsed.workspaces);
-        currentWorkspaceId = parsed.currentWorkspaceId || workspaceOrder[0];
-        tabCount = parsed.tabCount || 0;
-        wsCount = parsed.wsCount || workspaceOrder.length;
-        if (parsed.favorites) favorites = parsed.favorites;
-        if (parsed.globalHistory) globalHistory = parsed.globalHistory;
-        if (parsed.bookmarks) bookmarks = parsed.bookmarks;
-        if (parsed.recentlyClosedTabs) recentlyClosedTabs = parsed.recentlyClosedTabs;
-        if (parsed.settings) {
-          settings = {
-            ...DEFAULT_SETTINGS,
-            ...parsed.settings,
-            startPage: { ...DEFAULT_SETTINGS.startPage, ...(parsed.settings.startPage || {}) }
-          };
-        }
+      const stored = fs.readFileSync(filePath, 'utf8');
+      return JSON.parse(stored);
+    } catch (e) {
+      console.error(`Failed to load session from ${filePath}`, e);
+      return null;
+    }
+  };
+
+  let parsed = tryLoad(sessionFilePath);
+
+  // If primary fails, try backup
+  if (!parsed) {
+    console.log('Attempting to recover from backup session...');
+    parsed = tryLoad(`${sessionFilePath}.bak`);
+  }
+
+  if (parsed && parsed.workspaces && Object.keys(parsed.workspaces).length > 0) {
+    try {
+      workspaces = parsed.workspaces;
+      workspaceOrder = parsed.workspaceOrder || Object.keys(parsed.workspaces);
+      currentWorkspaceId = parsed.currentWorkspaceId || workspaceOrder[0];
+      tabCount = parsed.tabCount || 0;
+      wsCount = parsed.wsCount || workspaceOrder.length;
+      if (parsed.favorites) favorites = parsed.favorites;
+      if (parsed.globalHistory) globalHistory = parsed.globalHistory;
+      if (parsed.bookmarks) bookmarks = parsed.bookmarks;
+      if (parsed.recentlyClosedTabs) recentlyClosedTabs = parsed.recentlyClosedTabs;
+      if (parsed.settings) {
+        settings = {
+          ...DEFAULT_SETTINGS,
+          ...parsed.settings,
+          startPage: { ...DEFAULT_SETTINGS.startPage, ...(parsed.settings.startPage || {}) }
+        };
       }
     } catch (e) {
-      console.error('Failed to parse session file', e);
+      console.error('Failed to process loaded session data', e);
     }
+  }
+}
+
+function restoreSessionUI() {
+  const wsIds = workspaceOrder;
+  if (wsIds.length === 0) return;
+
+  tabBar.innerHTML = '';
+  browserViewsContainer.innerHTML = '';
+
+  wsIds.forEach(id => {
+    const ws = workspaces[id];
+    if (!ws) return;
+
+    // We must temporarily clear the tabs array because createWebview/createTabDOMElement 
+    // normally expect to be called during a "live" creation that pushes to the array.
+    // However, here we already have the tabs. 
+    // To reuse existing logic, we'll store them and re-add them.
+    const tabsToRestore = [...ws.tabs];
+    ws.tabs = [];
+
+    tabsToRestore.forEach(tab => {
+      // Re-initialize tab in the data model for the current workspace
+      ws.tabs.push(tab);
+
+      // Only create DOM/Webview if it's the current workspace
+      // Actually, we create WebViews for ALL tabs to maintain state, 
+      // but only the active tab's webview is visible.
+      createTabDOMElement(tab);
+      createWebview(tab);
+    });
+
+    // Ensure the tab active state is correct for this workspace
+    if (ws.activeTabId) {
+      // If the active tab was lost for some reason, pick the first one
+      if (!ws.tabs.find(t => t.id === ws.activeTabId)) {
+        ws.activeTabId = ws.tabs.length > 0 ? ws.tabs[0].id : null;
+      }
+    }
+  });
+
+  // Switch to the last active workspace
+  const targetWsId = currentWorkspaceId && workspaces[currentWorkspaceId] ? currentWorkspaceId : wsIds[0];
+  switchWorkspace(targetWsId);
+
+  const targetWs = workspaces[targetWsId];
+  if (targetWs && targetWs.activeTabId) {
+    setActiveTab(targetWs.activeTabId);
   }
 }
 
@@ -416,12 +527,19 @@ refreshBtn.addEventListener('click', () => {
 });
 
 homeBtn.addEventListener('click', () => {
-  if (settings.homepageMode === 'start-page') {
+  // If user wants Start Page, just show it
+  if (settings.homepageMode === 'start-page' || !settings.homepageUrl) {
     renderStartPage();
-    startPage.classList.add('active');
   } else {
+    // If they want a specific URL, load it in current tab or new tab
+    const finalUrl = formatInput(settings.homepageUrl);
     const wv = getActiveWebview();
-    if (wv && wv.loadURL) wv.loadURL(settings.homepageUrl);
+    if (wv) {
+      wv.loadURL(finalUrl);
+      if (startPage) startPage.classList.remove('active');
+    } else {
+      createTab(finalUrl);
+    }
   }
 });
 
@@ -668,62 +786,146 @@ function renderWorkspaceMenu() {
 
 // --- GLOBAL START PAGE & APP MODES LOGIC ---
 function renderStartPage() {
-  appMode = isIncognito ? 'incognito' : 'start';
-  const startPageOverlay = document.getElementById('startPage');
+  try {
+    appMode = isIncognito ? 'incognito' : 'start';
+    if (startPage) {
+      startPage.classList.add('active');
+    }
 
-  if (isIncognito) {
-    if (startPageOverlay) startPageOverlay.style.background = '#121212';
-    document.querySelector('.start-main-content').innerHTML = `
-      <div class="fade-in" style="display:flex; flex-direction:column; align-items:center; justify-content:center; height:100%; color:#fff;">
-        <svg viewBox="0 0 24 24" fill="none" stroke="#bb86fc" stroke-width="1.5" style="width:100px; height:100px; margin-bottom: 24px;">
-           <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><path d="M22 4L12 14.01l-3-3"></path>
-        </svg>
-        <h1 style="font-size:32px; font-weight:300; margin-bottom:12px;">You've gone Incognito</h1>
-        <p style="color:#aaa; max-width:500px; text-align:center; line-height:1.6;">Now you can browse privately. Other people who use this device won't see your activity.</p>
-        <p style="color:#bb86fc; margin-top:24px;">Premium Browser won't save:</p>
-        <ul style="color:#aaa; margin-top:8px; line-height:1.8;">
-           <li>Your browsing history</li>
-           <li>Cookies and site data</li>
-           <li>Information entered in forms</li>
-        </ul>
-      </div>
-    `;
-    return;
-  }
+    // Hide all webviews when on start page
+    Object.values(webviews).forEach(wv => {
+      if (wv && wv.classList) wv.classList.remove('active');
+    });
 
-  favoritesGrid.parentElement.style.display = settings.startPage.showFavorites ? 'block' : 'none';
-  startWsGrid.parentElement.style.display = settings.startPage.showWorkspaces ? 'block' : 'none';
+    // Close any other overlays
+    if (typeof settingsPage !== 'undefined' && settingsPage) settingsPage.classList.remove('active');
 
-  favoritesGrid.innerHTML = '';
-  favorites.forEach(fav => {
-    const el = document.createElement('div');
-    el.className = 'fav-item';
-    el.innerHTML = `
-      <div class="fav-icon-box">${fav.icon}</div>
+    if (isIncognito) {
+      if (startPage) startPage.style.background = '#121212';
+      const mainContent = document.querySelector('.start-main-content');
+      if (mainContent) {
+        mainContent.innerHTML = `
+          <div class="fade-in" style="display:flex; flex-direction:column; align-items:center; justify-content:center; height:100%; color:#fff;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="#bb86fc" stroke-width="1.5" style="width:100px; height:100px; margin-bottom: 24px;">
+               <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><path d="M22 4L12 14.01l-3-3"></path>
+            </svg>
+            <h1 style="font-size:32px; font-weight:300; margin-bottom:12px;">You've gone Incognito</h1>
+            <p style="color:#aaa; max-width:500px; text-align:center; line-height:1.6;">Now you can browse privately. Other people who use this device won't see your activity.</p>
+            <p style="color:#bb86fc; margin-top:24px;">Premium Browser won't save:</p>
+            <ul style="color:#aaa; margin-top:8px; line-height:1.8;">
+               <li>Your browsing history</li>
+               <li>Cookies and site data</li>
+               <li>Information entered in forms</li>
+            </ul>
+          </div>
+        `;
+      }
+      return;
+    }
+
+    // Safely re-render favorites
+    if (!favoritesGrid) return;
+
+    favoritesGrid.innerHTML = '';
+    favorites.forEach((fav, index) => {
+      const el = document.createElement('div');
+      el.className = 'fav-item';
+
+      // Ensure icon is usable (emoji or img)
+      const iconContent = (fav.icon && fav.icon.length < 5)
+        ? fav.icon
+        : `<img src="https://www.google.com/s2/favicons?sz=64&domain=${new URL(fav.url).hostname}" onerror="this.src='https://img.icons8.com/fluency/48/globe.png'" />`;
+
+      el.innerHTML = `
+      <div class="fav-icon-box">${iconContent}</div>
       <span class="fav-name">${fav.name}</span>
     `;
-    el.addEventListener('click', () => startTemporarySession(fav.url));
-    favoritesGrid.appendChild(el);
-  });
+      el.addEventListener('click', () => startTemporarySession(fav.url));
 
-  startWsGrid.innerHTML = '';
-  workspaceOrder.forEach(id => {
-    const ws = workspaces[id];
-    const el = document.createElement('div');
-    el.className = 'start-ws-card';
-    el.innerHTML = `
+      // Context menu to delete
+      el.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        if (confirm(`Remove ${fav.name} from favorites?`)) {
+          favorites.splice(index, 1);
+          localStorage.setItem('favorites', JSON.stringify(favorites));
+          renderStartPage();
+        }
+      });
+
+      favoritesGrid.appendChild(el);
+    });
+
+    // Add "+" Button
+    const addBtn = document.createElement('div');
+    addBtn.className = 'fav-item add-fav-btn';
+    addBtn.innerHTML = `
+    <div class="fav-icon-box">+</div>
+    <span class="fav-name">Add Shortcut</span>
+  `;
+    addBtn.onclick = openAddFavModal;
+    favoritesGrid.appendChild(addBtn);
+
+    // Render Workspaces
+    startWsGrid.innerHTML = '';
+    workspaceOrder.forEach(id => {
+      const ws = workspaces[id];
+      const el = document.createElement('div');
+      el.className = 'start-ws-card';
+      el.innerHTML = `
       <div class="workspace-dot" style="background: ${ws.color}"></div>
       <span style="font-size:14px; color:#fff; font-weight:500;">${ws.name}</span>
     `;
-    el.addEventListener('click', () => switchWorkspace(id));
-    startWsGrid.appendChild(el);
-  });
+      el.addEventListener('click', () => switchWorkspace(id));
+      startWsGrid.appendChild(el);
+    });
 
-  const lastWs = workspaces[currentWorkspaceId];
-  if (lastWs && lastWs.id !== 'ws_temp') {
-    continueWsBtn.textContent = `Continue ${lastWs.name}`;
-    continueWsBtn.onclick = () => switchWorkspace(currentWorkspaceId);
+    const lastWs = workspaces[currentWorkspaceId];
+    if (lastWs && lastWs.id !== 'ws_temp') {
+      continueWsBtn.textContent = `Continue ${lastWs.name}`;
+      continueWsBtn.onclick = () => switchWorkspace(currentWorkspaceId);
+    }
+  } catch (err) {
+    console.error('Error rendering start page:', err);
   }
+}
+
+// Add Favorite Modal logic
+const addFavModal = document.getElementById('addFavModal');
+const closeAddFavBtn = document.getElementById('closeAddFavBtn');
+const addFavSubmitBtn = document.getElementById('addFavSubmitBtn');
+const addFavNameInput = document.getElementById('addFavName');
+const addFavUrlInput = document.getElementById('addFavUrl');
+
+function openAddFavModal() {
+  addFavModal.classList.add('visible');
+}
+
+function closeAddFavModal() {
+  addFavModal.classList.remove('visible');
+  addFavNameInput.value = '';
+  addFavUrlInput.value = '';
+}
+
+if (closeAddFavBtn) closeAddFavBtn.onclick = closeAddFavModal;
+
+if (addFavSubmitBtn) {
+  addFavSubmitBtn.onclick = () => {
+    const name = addFavNameInput.value.trim();
+    const url = formatInput(addFavUrlInput.value.trim());
+    if (!name || !url) return;
+
+    favorites.push({
+      id: 'fav_' + Date.now(),
+      name,
+      url,
+      icon: '🌍'
+    });
+
+    localStorage.setItem('favorites', JSON.stringify(favorites));
+    closeAddFavModal();
+    renderStartPage();
+    syncPush(); // Sync if enabled
+  };
 }
 
 startSearchInput.addEventListener('keydown', (e) => {
@@ -772,7 +974,26 @@ function renderWorkspaceTabs() {
   }
 }
 
-// --- TAB CONTEXT MENU & LOCKING ---
+// --- TAB CONTEXT MENU, LOCKING & PINNING ---
+
+// Pin Tab toggle
+pinTabAction.addEventListener('click', () => {
+  if (contextMenuTargetTabId === null) return;
+  const ws = workspaces[currentWorkspaceId];
+  const tabData = ws.tabs.find(t => t.id === contextMenuTargetTabId);
+  if (!tabData) return;
+
+  tabData.isPinned = !tabData.isPinned;
+
+  // Pinned tabs are also implicitly locked (close prevention)
+  if (tabData.isPinned) tabData.isLocked = true;
+
+  tabContextMenu.classList.remove('visible');
+  // Re-render the full tab bar to reorder and update compact style
+  reorderTabsInDOM();
+  if (appMode !== 'temporary') saveSession();
+});
+
 lockTabAction.addEventListener('click', () => {
   if (contextMenuTargetTabId === null) return;
   const ws = workspaces[currentWorkspaceId];
@@ -796,9 +1017,32 @@ lockTabAction.addEventListener('click', () => {
 closeTabAction.addEventListener('click', () => {
   if (contextMenuTargetTabId === null) return;
   const ws = workspaces[currentWorkspaceId];
-  const tabData = ws.tabs.find(t => t.id === contextMenuTargetTabId);
+  const tabData = ws && ws.tabs.find(t => t.id === contextMenuTargetTabId);
   if (tabData && tabData.isLocked) return;
   closeTab(contextMenuTargetTabId);
+  tabContextMenu.classList.remove('visible');
+});
+
+document.getElementById('duplicateTabAction').addEventListener('click', () => {
+  if (contextMenuTargetTabId === null) return;
+  const ws = workspaces[currentWorkspaceId];
+  const srcTab = ws && ws.tabs.find(t => t.id === contextMenuTargetTabId);
+  if (srcTab) {
+    createTab(srcTab.url);
+    showStatus('Tab duplicated');
+  }
+  tabContextMenu.classList.remove('visible');
+});
+
+document.getElementById('reopenTabAction').addEventListener('click', () => {
+  if (recentlyClosedTabs.length > 0 && appMode !== 'start') {
+    const restored = recentlyClosedTabs.pop();
+    createTab(restored.url);
+    saveSession();
+    showStatus(`Reopened: ${restored.title || restored.url}`);
+  } else {
+    showStatus('No recently closed tabs');
+  }
   tabContextMenu.classList.remove('visible');
 });
 
@@ -856,15 +1100,17 @@ function setActiveTab(tabId) {
     else webviews[wId].classList.remove('active');
   });
 
+  // Automatically hide start page when a tab is selected
+  if (startPage) startPage.classList.remove('active');
+
   const activeTab = getActiveTab();
   if (!activeTab) return;
 
   const wv = getActiveWebview();
-  if (wv && wv.getURL) {
-    urlInput.value = wv.getURL() || activeTab.url;
-  } else {
-    urlInput.value = activeTab.url;
-  }
+  // Use the live URL from the webview process when available; fall back to our cached tab.url
+  const liveUrl = (wv && wv.getURL && wv.getURL()) || activeTab.url || '';
+  syncUrlBar(liveUrl);
+  activeTab.url = liveUrl || activeTab.url; // keep data model fresh
 
   if (readerBtn) {
     if (activeTab.isReaderMode) {
@@ -876,20 +1122,151 @@ function setActiveTab(tabId) {
     }
   }
 
+  // Handle tab-aware permission prompt transitions
+  if (typeof showNextPermission === 'function') {
+    if (permActive) {
+      permQueue.unshift(permActive);
+      permActive = null;
+    }
+    showNextPermission();
+  }
+
+  if (siteInfoMenu) siteInfoMenu.classList.remove('visible');
+
+  updateNavButtons();
   updateBookmarkVisuals(urlInput.value);
   if (typeof updateShieldUI === 'function') updateShieldUI();
   if (appMode !== 'temporary') saveSession();
 }
 
+/**
+ * syncUrlBar — the ONE place that writes to urlInput.
+ * Rules:
+ *   1. Never overwrite while user is actively editing.
+ *   2. Never show about:blank / empty string.
+ *   3. Strip internal error page URLs — show the real broken URL instead.
+ */
+function syncUrlBar(rawUrl) {
+  if (document.activeElement === urlInput) return; // User is typing — leave it alone
+
+  let display = rawUrl || '';
+
+  // Hide about:blank and empty (new tabs before page loads)
+  if (!display || display === 'about:blank') return;
+
+  // Strip our internal error.html path so the bar shows the failing URL
+  if (display.includes('error.html?url=')) {
+    try {
+      const errUrl = new URL(display);
+      const real = errUrl.searchParams.get('url');
+      if (real) display = decodeURIComponent(real);
+    } catch (_) { }
+  }
+
+  if (urlInput.value !== display) {
+    urlInput.value = display;
+    updateBookmarkVisuals(display);
+  }
+}
+
+function updateNavButtons() {
+  const wv = getActiveWebview();
+  if (!wv) {
+    backBtn.disabled = true;
+    forwardBtn.disabled = true;
+    return;
+  }
+
+  // Electron webview methods: canGoBack(), canGoForward()
+  try {
+    if (typeof wv.canGoBack === 'function') backBtn.disabled = !wv.canGoBack();
+    if (typeof wv.canGoForward === 'function') forwardBtn.disabled = !wv.canGoForward();
+  } catch (e) {
+    // Webview might not be ready yet
+    backBtn.disabled = true;
+    forwardBtn.disabled = true;
+  }
+}
+
 function updateTabTitle(tabId, newTitle) {
   const ws = workspaces[currentWorkspaceId];
   if (!ws) return;
-  const tab = ws.tabs.find(t => t.id === tabId);
+  // Search across all workspaces in case tab is not in current one
+  let tab = ws.tabs.find(t => t.id === tabId);
+  if (!tab) {
+    for (const wsId of workspaceOrder) {
+      tab = workspaces[wsId].tabs.find(t => t.id === tabId);
+      if (tab) break;
+    }
+  }
   if (!tab) return;
-  tab.title = newTitle || 'New Tab';
-  const tabEl = document.querySelector(`.tab[data-id="${tabId}"] .tab-title`);
-  if (tabEl) tabEl.textContent = tab.title;
+  const title = newTitle || 'New Tab';
+  if (tab.title === title) return; // No change, skip DOM update
+  tab.title = title;
+  const titleEl = document.querySelector(`.tab[data-id="${tabId}"] .tab-title`);
+  if (titleEl) titleEl.textContent = title;
   if (appMode !== 'temporary') saveSession();
+}
+
+function updateTabFavicon(tabId, favicons) {
+  // Prefer the highest-res icon available
+  const url = (favicons && favicons.length > 0) ? favicons[0] : null;
+
+  // Find the tab data model in any workspace
+  let tab = null;
+  for (const wsId of workspaceOrder) {
+    const found = workspaces[wsId].tabs.find(t => t.id === tabId);
+    if (found) { tab = found; break; }
+  }
+  if (!tab) return;
+
+  tab.favicon = url || null;
+
+  const imgEl = document.querySelector(`.tab[data-id="${tabId}"] .tab-favicon`);
+  if (!imgEl) return;
+
+  if (url) {
+    imgEl.src = url;
+    imgEl.style.display = 'block';
+    imgEl.onerror = () => { imgEl.style.display = 'none'; }; // Fallback on broken URL
+  } else {
+    imgEl.style.display = 'none';
+  }
+}
+
+function setTabLoading(tabId, isLoading) {
+  const tabEl = document.querySelector(`.tab[data-id="${tabId}"]`);
+  if (!tabEl) return;
+
+  if (isLoading) {
+    tabEl.classList.add('loading');
+    // Swap favicon for spinner — restore will happen in setTabLoading(false)
+    const img = tabEl.querySelector('.tab-favicon');
+    if (img) {
+      img._realSrc = img.src || '';      // cache real icon
+      img.src = '';
+      img.style.display = 'block';
+      img.style.animation = 'tab-spin 0.7s linear infinite';
+    }
+  } else {
+    tabEl.classList.remove('loading');
+    const img = tabEl.querySelector('.tab-favicon');
+    if (img) {
+      img.style.animation = '';
+      if (img._realSrc) {
+        img.src = img._realSrc;
+      } else {
+        img.style.display = 'none';
+      }
+    }
+  }
+}
+
+function setTabError(tabId, hasError) {
+  const tabEl = document.querySelector(`.tab[data-id="${tabId}"]`);
+  if (!tabEl) return;
+  if (hasError) tabEl.classList.add('load-error');
+  else tabEl.classList.remove('load-error');
 }
 
 function createWebview(tab) {
@@ -904,14 +1281,35 @@ function createWebview(tab) {
   webviews[tab.id] = wv;
 
   wv.addEventListener('did-fail-load', (e) => {
-    // e.errorCode -3 is ERR_ABORTED (happens when navigation is stopped or download starts)
-    if (e.errorCode !== -3 && e.validatedURL) {
-      // Build dynamic path to the error.html
-      const errorPage = `file://${path.join(__dirname, '..', 'error.html')}?url=${encodeURIComponent(e.validatedURL)}&error=${encodeURIComponent(e.errorDescription)}`;
+    // -3 = ERR_ABORTED: navigation cancelled or download started — not a real error
+    if (e.errorCode === -3) return;
+
+    console.error(`[Webview Error] Tab ${tab.id} failed to load: ${e.errorDescription} (${e.errorCode})`);
+
+    setTabLoading(tab.id, false);
+    setTabError(tab.id, true);
+
+    if (e.validatedURL) {
+      const errorPage = `file://${path.join(__dirname, '..', 'error.html')}?url=${encodeURIComponent(e.validatedURL)}&error=${encodeURIComponent(e.errorDescription)}&type=network`;
       wv.loadURL(errorPage);
       if (workspaces[currentWorkspaceId] && workspaces[currentWorkspaceId].activeTabId === tab.id) {
-        showStatus('Connection Interrupted');
+        showStatus(`Connection Error: ${e.errorDescription}`);
       }
+    }
+  });
+
+  wv.addEventListener('render-process-gone', (details) => {
+    console.error(`[Webview Crash] Tab ${tab.id} renderer process gone: ${details.reason}`);
+
+    setTabLoading(tab.id, false);
+    setTabError(tab.id, true);
+
+    const crashUrl = wv.getURL();
+    const errorPage = `file://${path.join(__dirname, '..', 'error.html')}?url=${encodeURIComponent(crashUrl)}&error=${encodeURIComponent(details.reason)}&type=crash`;
+    wv.loadURL(errorPage);
+
+    if (workspaces[currentWorkspaceId] && workspaces[currentWorkspaceId].activeTabId === tab.id) {
+      showStatus('Page Crashed');
     }
   });
 
@@ -927,60 +1325,86 @@ function createWebview(tab) {
     tab.isAudible = true;
     tab.hasMedia = true;
     reorderTabsInDOM();
-    if(mediaPopup && mediaPopup.classList.contains('visible')) renderMediaHub();
+    if (mediaPopup && mediaPopup.classList.contains('visible')) renderMediaHub();
   });
-  
+
   wv.addEventListener('media-paused', () => {
     tab.isAudible = false;
     reorderTabsInDOM();
-    if(mediaPopup && mediaPopup.classList.contains('visible')) renderMediaHub();
+    if (mediaPopup && mediaPopup.classList.contains('visible')) renderMediaHub();
   });
 
   wv.addEventListener('did-start-loading', () => {
-    const ws = workspaces[currentWorkspaceId];
-    if (ws && ws.activeTabId === tab.id) showStatus('Loading...');
+    setTabLoading(tab.id, true);
+    setTabError(tab.id, false);
+    if (workspaces[currentWorkspaceId] && workspaces[currentWorkspaceId].activeTabId === tab.id) {
+      showStatus('Loading...');
+    }
   });
 
   wv.addEventListener('did-stop-loading', () => {
+    setTabLoading(tab.id, false);
+    const url = wv.getURL();
+    tab.url = url || tab.url;
     if (workspaces[currentWorkspaceId] && workspaces[currentWorkspaceId].activeTabId === tab.id) {
       showStatus('Ready');
-      const url = wv.getURL();
-      tab.url = url;
-      if (document.activeElement !== urlInput) urlInput.value = url;
-      updateBookmarkVisuals(url);
+      syncUrlBar(tab.url);
+      updateNavButtons();
       if (appMode !== 'temporary') saveSession();
     } else {
-      tab.url = wv.getURL();
       if (appMode !== 'temporary') saveSession();
     }
   });
 
   wv.addEventListener('page-title-updated', (event) => updateTabTitle(tab.id, event.title));
+  wv.addEventListener('page-favicon-updated', (event) => updateTabFavicon(tab.id, event.favicons));
 
   wv.addEventListener('did-navigate', (e) => {
-    tab.url = wv.getURL();
-    if (workspaces[currentWorkspaceId] && workspaces[currentWorkspaceId].activeTabId === tab.id && document.activeElement !== urlInput) {
-      urlInput.value = tab.url;
-      updateBookmarkVisuals(tab.url);
+    const url = wv.getURL() || e.url;
+    tab.url = url;
+    if (workspaces[currentWorkspaceId] && workspaces[currentWorkspaceId].activeTabId === tab.id) {
+      syncUrlBar(url);
+      updateBookmarkVisuals(url);
+      updateNavButtons();
     }
     registerHistoryEvent(tab.url, wv.getTitle());
     if (appMode !== 'temporary') saveSession();
   });
 
   wv.addEventListener('did-navigate-in-page', (e) => {
-    tab.url = wv.getURL();
-    if (workspaces[currentWorkspaceId] && workspaces[currentWorkspaceId].activeTabId === tab.id && document.activeElement !== urlInput) {
-      urlInput.value = tab.url;
-      updateBookmarkVisuals(tab.url);
+    // SPA soft navigation: hash change, pushState etc.
+    const url = wv.getURL() || e.url;
+    tab.url = url;
+    if (workspaces[currentWorkspaceId] && workspaces[currentWorkspaceId].activeTabId === tab.id) {
+      syncUrlBar(url);
+      updateBookmarkVisuals(url);
     }
     registerHistoryEvent(tab.url, wv.getTitle());
     if (appMode !== 'temporary') saveSession();
+  });
+
+  // --- POPUP / NEW WINDOW HANDLING ---
+  wv.addEventListener('new-window', (e) => {
+    e.preventDefault();
+    const { url, disposition } = e;
+
+    // Auto-allow background tabs or simple navigations if we want,
+    // but the user requested explicit control:
+    queuePopupRequest(url, disposition);
   });
 }
 
 function reorderTabsInDOM() {
   const ws = workspaces[currentWorkspaceId];
   if (!ws) return;
+
+  // Keep pinned tabs at the left
+  ws.tabs.sort((a, b) => {
+    if (a.isPinned && !b.isPinned) return -1;
+    if (!a.isPinned && b.isPinned) return 1;
+    return 0;
+  });
+
   tabBar.innerHTML = '';
   ws.tabs.forEach(t => createTabDOMElement(t));
   setActiveTab(ws.activeTabId);
@@ -991,13 +1415,22 @@ function createTabDOMElement(tab) {
   tabEl.className = 'tab'
   tabEl.dataset.id = tab.id
   if (tab.isLocked) tabEl.classList.add('locked');
+  if (tab.isPinned) tabEl.classList.add('pinned');
 
   const lockIcon = tab.isLocked ? iconLock : iconUnlock;
-  const muteHtml = tab.isMuted ? '<span class="mute-tab-btn" title="Unmute">🔇</span>' : 
-                   (tab.isAudible ? '<span class="mute-tab-btn" title="Mute">🔊</span>' : '');
+  const muteHtml = tab.isMuted ? '<span class="mute-tab-btn" title="Unmute">🔇</span>' :
+    (tab.isAudible ? '<span class="mute-tab-btn" title="Mute">🔊</span>' : '');
 
-  tabEl.innerHTML = `<span class="tab-title">${tab.title}</span>${muteHtml}<span class="close-tab">${lockIcon}</span>`
-  
+  const faviconHtml = tab.favicon
+    ? `<img class="tab-favicon" src="${tab.favicon}" alt="" />`
+    : `<img class="tab-favicon" alt="" style="display:none" />`;
+
+  tabEl.innerHTML = `${faviconHtml}<span class="tab-title">${tab.title}</span>${muteHtml}<span class="close-tab">${lockIcon}</span>`;
+
+  // Wire up the favicon onerror fallback for pre-stored favicons
+  const faviconEl = tabEl.querySelector('.tab-favicon');
+  if (faviconEl) faviconEl.onerror = () => { faviconEl.style.display = 'none'; };
+
   const muteBtn = tabEl.querySelector('.mute-tab-btn');
   if (muteBtn) {
     muteBtn.addEventListener('click', (e) => {
@@ -1035,16 +1468,16 @@ function createTabDOMElement(tab) {
   tabEl.addEventListener('drop', (e) => {
     e.preventDefault();
     tabEl.classList.remove('drag-over');
-    
+
     const draggedId = Number(e.dataTransfer.getData('text/plain'));
     if (draggedId === tab.id) return;
-    
+
     const ws = workspaces[currentWorkspaceId];
     if (!ws) return;
-    
+
     const fromIndex = ws.tabs.findIndex(t => t.id === draggedId);
     const toIndex = ws.tabs.findIndex(t => t.id === tab.id);
-    
+
     if (fromIndex !== -1 && toIndex !== -1) {
       const movedTab = ws.tabs.splice(fromIndex, 1)[0];
       ws.tabs.splice(toIndex, 0, movedTab);
@@ -1058,9 +1491,14 @@ function createTabDOMElement(tab) {
   tabEl.addEventListener('contextmenu', (e) => {
     e.preventDefault();
     contextMenuTargetTabId = tab.id;
+
+    // Update dynamic labels
+    pinTabLabel.textContent = tab.isPinned ? 'Unpin Tab' : 'Pin Tab';
     const lockText = tab.isLocked ? 'Unlock Tab' : 'Lock Tab';
     lockTabAction.querySelector('span').textContent = lockText;
-    if (tab.isLocked) closeTabAction.classList.add('disabled');
+
+    // Close is disabled for locked OR pinned tabs
+    if (tab.isLocked || tab.isPinned) closeTabAction.classList.add('disabled');
     else closeTabAction.classList.remove('disabled');
 
     tabContextMenu.style.left = `${e.clientX}px`;
@@ -1080,7 +1518,7 @@ function createTabDOMElement(tab) {
 function createTab(initialUrl = 'https://duckduckgo.com') {
   tabCount++
   const id = tabCount
-  const tab = { id, title: `New Tab`, url: initialUrl, isLocked: false }
+  const tab = { id, title: `New Tab`, url: initialUrl, isLocked: false, isPinned: false }
 
   const ws = workspaces[currentWorkspaceId];
   if (!ws) return;
@@ -1095,35 +1533,62 @@ function createTab(initialUrl = 'https://duckduckgo.com') {
 function closeTab(tabId) {
   const ws = workspaces[currentWorkspaceId];
   if (!ws) return;
+
   const tabData = ws.tabs.find(t => t.id === tabId);
-  if (tabData && tabData.isLocked) return;
+  if (!tabData) return;           // Already removed
+  if (tabData.isLocked) return;   // Locked tabs cannot be closed
+  if (tabData.isPinned) return;   // Pinned tabs cannot be closed
 
-  const closingIndex = ws.tabs.findIndex(tab => tab.id === tabId)
-  if (closingIndex === -1) return
+  const closingIndex = ws.tabs.findIndex(t => t.id === tabId);
 
-  if (appMode !== 'temporary' && tabData) {
-    recentlyClosedTabs.push({ url: tabData.url, title: tabData.title, closedAt: Date.now() });
+  // --- Determine fallback BEFORE mutating the array ---
+  // Prefer the tab to the right, then left, then create a new one
+  const nextFallback =
+    ws.tabs[closingIndex + 1] ||
+    ws.tabs[closingIndex - 1] ||
+    null;
+  const isActive = ws.activeTabId === tabId;
+
+  // --- Save to closed-tab stack (max 25) ---
+  if (appMode !== 'temporary') {
+    recentlyClosedTabs.push({
+      url: tabData.url,
+      title: tabData.title || tabData.url,
+      closedAt: Date.now(),
+      workspaceId: currentWorkspaceId
+    });
     if (recentlyClosedTabs.length > 25) recentlyClosedTabs.shift();
   }
 
-  ws.tabs = ws.tabs.filter(tab => tab.id !== tabId)
+  // --- Remove from data model ---
+  ws.tabs = ws.tabs.filter(t => t.id !== tabId);
 
-  const tabEl = document.querySelector(`.tab[data-id="${tabId}"]`)
+  // --- Remove DOM tab element ---
+  const tabEl = document.querySelector(`.tab[data-id="${tabId}"]`);
   if (tabEl) tabEl.remove();
 
-  if (webviews[tabId]) {
-    webviews[tabId].remove();
+  // --- Destroy webview (prevent memory leak) ---
+  const wv = webviews[tabId];
+  if (wv) {
+    try { wv.stop(); } catch (_) { }
+    // Do NOT set src = 'about:blank' — Electron throws ERR_FAILED (-2) on about:blank loads in webviews
+    wv.remove();
     delete webviews[tabId];
   }
 
-  if (ws.activeTabId === tabId) {
-    const fallbackTab = ws.tabs[closingIndex] || ws.tabs[closingIndex - 1] || ws.tabs[0]
-    if (fallbackTab) {
-      setActiveTab(fallbackTab.id)
+  // --- Switch active tab if needed ---
+  if (isActive) {
+    if (nextFallback) {
+      setActiveTab(nextFallback.id);
+    } else if (ws.tabs.length > 0) {
+      setActiveTab(ws.tabs[0].id);
     } else {
+      // Last tab closed → open a fresh new-tab page
+      ws.activeTabId = null;
       createTab();
     }
   }
+
   if (appMode !== 'temporary') saveSession();
 }
 
@@ -1140,35 +1605,10 @@ function goToInput() {
   if (appMode !== 'temporary') saveSession();
 }
 
-// --- TOOLBAR BUTTON HANDLERS ---
-newTabBtn.addEventListener('click', () => createTab())
-backBtn.addEventListener('click', () => { const wv = getActiveWebview(); if (wv && wv.canGoBack && wv.canGoBack()) wv.goBack(); })
-
 tabBar.addEventListener('wheel', (e) => {
   if (e.deltaY !== 0) {
     e.preventDefault();
     tabBar.scrollLeft += e.deltaY;
-  }
-});
-forwardBtn.addEventListener('click', () => { const wv = getActiveWebview(); if (wv && wv.canGoForward && wv.canGoForward()) wv.goForward(); })
-refreshBtn.addEventListener('click', () => { const wv = getActiveWebview(); if (wv && wv.reload) wv.reload(); })
-
-homeBtn.addEventListener('click', () => {
-  if (settings.homepageMode === 'start-page') {
-    startSearchInput.value = '';
-    renderStartPage();
-    startPage.classList.add('active');
-  } else {
-    const finalUrl = formatInput(settings.homepageUrl);
-    const activeTab = getActiveTab();
-    if (!activeTab) return;
-
-    activeTab.url = finalUrl;
-    const wv = getActiveWebview();
-    if (wv) wv.src = finalUrl;
-
-    urlInput.value = finalUrl;
-    if (appMode !== 'temporary') saveSession();
   }
 });
 
@@ -1188,7 +1628,7 @@ if (readerBtn) {
     const wv = getActiveWebview();
     const tab = getActiveTab();
     if (!wv || !tab) return;
-    
+
     if (tab.isReaderMode) {
       tab.isReaderMode = false;
       readerBtn.classList.remove('active');
@@ -1198,7 +1638,7 @@ if (readerBtn) {
       tab.isReaderMode = true;
       readerBtn.classList.add('active');
       readerBtn.style.color = 'var(--accent, #6ab04c)';
-      
+
       wv.executeJavaScript(`
         (() => {
           let bestNode = document.body;
@@ -1250,7 +1690,7 @@ function renderMediaHub() {
   if (!mediaList) return;
   mediaList.innerHTML = '';
   let hasMedia = false;
-  
+
   if (workspaces && workspaces[currentWorkspaceId]) {
     const ws = workspaces[currentWorkspaceId];
     ws.tabs.forEach(tab => {
@@ -1258,14 +1698,14 @@ function renderMediaHub() {
         hasMedia = true;
         const wv = webviews[tab.id];
         const isPlaying = tab.isAudible;
-        
+
         const item = document.createElement('div');
         item.className = 'media-item';
-        
+
         const playIcon = `<svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>`;
         const pauseIcon = `<svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>`;
         const pipIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><rect x="12" y="14" width="8" height="5"></rect></svg>`;
-        
+
         item.innerHTML = `
           <div>
             <div class="media-title">${tab.title}</div>
@@ -1281,7 +1721,7 @@ function renderMediaHub() {
           </div>
         `;
         mediaList.appendChild(item);
-        
+
         item.querySelector(`#mPlay_${tab.id}`).onclick = () => {
           if (wv) {
             wv.executeJavaScript(`
@@ -1293,7 +1733,7 @@ function renderMediaHub() {
             setTimeout(renderMediaHub, 300);
           }
         };
-        
+
         item.querySelector(`#mPip_${tab.id}`).onclick = () => {
           if (wv) {
             wv.executeJavaScript(`
@@ -1307,7 +1747,7 @@ function renderMediaHub() {
       }
     });
   }
-  
+
   if (!hasMedia) {
     mediaList.innerHTML = '<div class="media-empty">No active media sessions</div>';
   }
@@ -1316,8 +1756,8 @@ function renderMediaHub() {
 if (mediaBtn) {
   mediaBtn.addEventListener('click', (e) => {
     e.stopPropagation();
-    if(downloadsMenu) downloadsMenu.classList.remove('visible');
-    if(shieldMenu) shieldMenu.classList.remove('visible');
+    if (downloadsMenu) downloadsMenu.classList.remove('visible');
+    if (shieldMenu) shieldMenu.classList.remove('visible');
     mediaPopup.classList.toggle('visible');
     if (mediaPopup.classList.contains('visible')) {
       renderMediaHub();
@@ -1337,7 +1777,10 @@ let activeDownloads = {};
 if (downloadsBtn) {
   downloadsBtn.addEventListener('click', (e) => {
     e.stopPropagation();
+    if (mediaPopup) mediaPopup.classList.remove('visible');
+    if (shieldMenu) shieldMenu.classList.remove('visible');
     downloadsMenu.classList.toggle('visible');
+    if (downloadsMenu.classList.contains('visible')) renderDownloads();
   });
 
   document.addEventListener('click', (e) => {
@@ -1346,74 +1789,112 @@ if (downloadsBtn) {
     }
   });
 
-  clearDownloadsBtn.addEventListener('click', () => {
-    activeDownloads = {};
-    renderDownloads();
-  });
+  if (clearDownloadsBtn) {
+    clearDownloadsBtn.addEventListener('click', () => {
+      activeDownloads = {};
+      renderDownloads();
+    });
+  }
 }
 
 function renderDownloads() {
   const dls = Object.values(activeDownloads).reverse();
   downloadsList.innerHTML = '';
+
+  let hasActive = false;
+
   if (dls.length === 0) {
     downloadsList.innerHTML = '<div class="downloads-empty">No recent downloads</div>';
+    document.body.classList.remove('has-active-download');
     return;
   }
 
   dls.forEach(dl => {
     const el = document.createElement('div');
-    el.className = `dl-item ${dl.state === 'completed' ? 'done' : dl.state === 'interrupted' ? 'interrupted' : ''}`;
+    el.className = `dl-item ${dl.state}`;
 
-    let statusText = dl.state === 'completed' ? 'Done' : dl.state === 'interrupted' ? 'Failed' : `${dl.percent.toFixed(0)}%`;
-    let actionBtn = dl.state === 'completed' ? `<button class="dl-action-btn" title="Show in Folder"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg></button>` : '';
+    if (dl.state === 'progressing') hasActive = true;
+
+    const percent = dl.totalBytes > 0 ? (dl.receivedBytes / dl.totalBytes) * 100 : 0;
+
+    let statusText = '';
+    if (dl.state === 'completed') statusText = 'Completed';
+    else if (dl.state === 'cancelled') statusText = 'Cancelled';
+    else if (dl.state === 'interrupted') statusText = 'Interrupted';
+    else if (dl.state === 'progressing') {
+      const mbReceived = (dl.receivedBytes / (1024 * 1024)).toFixed(1);
+      const mbTotal = (dl.totalBytes / (1024 * 1024)).toFixed(1);
+      statusText = `${mbReceived} MB / ${mbTotal} MB (${percent.toFixed(0)}%)`;
+    }
+
+    const pauseIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>`;
+    const playIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>`;
+    const cancelIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>`;
+    const folderIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>`;
+
+    let actionsHtml = '';
+    if (dl.state === 'progressing') {
+      actionsHtml = `
+        <button class="dl-action-btn pause-resume-btn" title="Pause/Resume">${pauseIcon}</button>
+        <button class="dl-action-btn cancel-btn" title="Cancel">${cancelIcon}</button>
+      `;
+    } else if (dl.state === 'completed') {
+      actionsHtml = `<button class="dl-action-btn show-folder-btn" title="Show in Folder">${folderIcon}</button>`;
+    }
 
     el.innerHTML = `
       <div class="dl-item-top">
         <div class="dl-info">
-          <div class="dl-name">${dl.fileName}</div>
+          <div class="dl-name" title="${dl.filename}">${dl.filename}</div>
           <div class="dl-status">${statusText}</div>
         </div>
-        <div class="dl-actions">${actionBtn}</div>
+        <div class="dl-actions">${actionsHtml}</div>
       </div>
-      <div class="dl-progress-bar">
-        <div class="dl-progress-fill" style="width: ${dl.state === 'completed' ? 100 : dl.percent}%"></div>
+      <div class="dl-progress-bg">
+        <div class="dl-progress-fill" style="width: ${dl.state === 'completed' ? 100 : percent}%"></div>
       </div>
     `;
 
-    if (dl.state === 'completed' && dl.savePath) {
-      const btn = el.querySelector('.dl-action-btn');
-      if (btn) btn.addEventListener('click', () => shell.showItemInFolder(dl.savePath));
+    // Event Listeners
+    if (dl.state === 'progressing') {
+      el.querySelector('.pause-resume-btn').onclick = () => {
+        ipcRenderer.send('pause-download', dl.id);
+      };
+      el.querySelector('.cancel-btn').onclick = () => {
+        ipcRenderer.send('cancel-download', dl.id);
+      };
+    } else if (dl.state === 'completed' && dl.path) {
+      el.querySelector('.show-folder-btn').onclick = () => {
+        ipcRenderer.send('show-item-in-folder', dl.path);
+      };
     }
 
     downloadsList.appendChild(el);
   });
+
+  if (hasActive) document.body.classList.add('has-active-download');
+  else document.body.classList.remove('has-active-download');
 }
 
-ipcRenderer.on('download-started', (e, { id, fileName }) => {
-  activeDownloads[id] = { id, fileName, percent: 0, state: 'progressing' };
+ipcRenderer.on('download-started', (e, { id, filename, totalBytes }) => {
+  activeDownloads[id] = { id, filename, totalBytes, receivedBytes: 0, state: 'progressing' };
   renderDownloads();
-  downloadsMenu.classList.add('visible'); // Auto-show
+  if (downloadsMenu) downloadsMenu.classList.add('visible');
 });
 
-ipcRenderer.on('download-progress', (e, { id, percent }) => {
+ipcRenderer.on('download-progress', (e, { id, receivedBytes, totalBytes, state }) => {
   if (activeDownloads[id]) {
-    activeDownloads[id].percent = percent;
+    activeDownloads[id].receivedBytes = receivedBytes;
+    activeDownloads[id].totalBytes = totalBytes;
+    activeDownloads[id].state = state === 'interrupted' ? 'interrupted' : activeDownloads[id].state;
     renderDownloads();
   }
 });
 
-ipcRenderer.on('download-done', (e, { id, state, savePath }) => {
+ipcRenderer.on('download-done', (e, { id, state, path }) => {
   if (activeDownloads[id]) {
-    activeDownloads[id].state = state;
-    activeDownloads[id].savePath = savePath;
-    if (state === 'completed') activeDownloads[id].percent = 100;
-    renderDownloads();
-  }
-});
-
-ipcRenderer.on('download-interrupted', (e, { id }) => {
-  if (activeDownloads[id]) {
-    activeDownloads[id].state = 'interrupted';
+    activeDownloads[id].state = state; // 'completed', 'cancelled', 'interrupted'
+    activeDownloads[id].path = path;
     renderDownloads();
   }
 });
@@ -1669,14 +2150,14 @@ async function renderAutofillManager() {
   const data = await ipcRenderer.invoke('get-autofill-data');
   autofillProfiles = data.profiles || [];
   autofillCards = data.cards || [];
-  
+
   const addressList = document.getElementById('addressList');
   const cardsList = document.getElementById('cardsList');
-  if(!addressList || !cardsList) return;
-  
+  if (!addressList || !cardsList) return;
+
   addressList.innerHTML = '';
   cardsList.innerHTML = '';
-  
+
   if (autofillProfiles.length === 0) {
     addressList.innerHTML = '<div style="color:var(--text-secondary); padding:12px; text-align:center; background:rgba(255,255,255,0.05); border-radius:8px;">No addresses saved yet.</div>';
   } else {
@@ -1699,7 +2180,7 @@ async function renderAutofillManager() {
       addressList.appendChild(item);
     });
   }
-  
+
   if (autofillCards.length === 0) {
     cardsList.innerHTML = '<div style="color:var(--text-secondary); padding:12px; text-align:center; background:rgba(255,255,255,0.05); border-radius:8px;">No credit cards saved yet.</div>';
   } else {
@@ -1958,20 +2439,20 @@ if (installCrxBtn) {
   installCrxBtn.addEventListener('click', async () => {
     let raw = crxIdInput.value.trim();
     if (!raw) return;
-    
+
     let extId = raw;
     const match = raw.match(/([a-z]{32})/);
     if (match) extId = match[1];
-    
+
     installCrxBtn.disabled = true;
     const originalText = installCrxBtn.textContent;
     installCrxBtn.textContent = 'Installing...';
-    
+
     const result = await ipcRenderer.invoke('install-chrome-extension', extId);
-    
+
     installCrxBtn.disabled = false;
     installCrxBtn.textContent = originalText;
-    
+
     if (result && result.success) {
       crxIdInput.value = '';
       showStatus(`Installed Extension: ${result.name}`);
@@ -1994,27 +2475,397 @@ if (loadExtensionBtn) {
   });
 }
 
-// --- KEYBOARD SHORTCUTS ---
-window.addEventListener('keydown', (e) => {
-  const isCmdOrCtrl = e.metaKey || e.ctrlKey;
-  if (isCmdOrCtrl && e.shiftKey && e.key.toLowerCase() === 'n') {
-    e.preventDefault();
-    ipcRenderer.send('open-incognito-window');
-  } else if (isCmdOrCtrl && !e.shiftKey && e.key.toLowerCase() === 'n') {
-    e.preventDefault();
-    ipcRenderer.send('open-new-window');
-  } else if (isCmdOrCtrl && !e.shiftKey && e.key.toLowerCase() === 't') {
-    e.preventDefault();
-    createTab();
+// --- GLOBAL KEYBOARD SHORTCUTS (Window-Level) ---
+// All tab/navigation shortcuts are handled in the main document.addEventListener('keydown')
+// block near the top of this file (Ctrl+T, Ctrl+W, Ctrl+Shift+T, Ctrl+L, Ctrl+Tab, Ctrl+Shift+Tab).
+// This block only handles IPC-forwarded shortcuts from main process.
+ipcRenderer.on('keyboard-shortcut-new-tab', () => createTab());
+ipcRenderer.on('keyboard-shortcut-close-tab', () => {
+  if (appMode !== 'start') {
+    const active = getActiveTab();
+    if (active) closeTab(active.id);
+  }
+});
+ipcRenderer.on('keyboard-shortcut-focus-url', () => {
+  urlInput.focus();
+  urlInput.select();
+});
+ipcRenderer.on('keyboard-shortcut-reopen-tab', () => {
+  if (recentlyClosedTabs.length > 0 && appMode !== 'start') {
+    const restored = recentlyClosedTabs.pop();
+    createTab(restored.url);
+    saveSession();
+  }
+});
+ipcRenderer.on('keyboard-shortcut-next-tab', () => {
+  if (appMode !== 'start') {
+    const ws = workspaces[currentWorkspaceId];
+    if (ws && ws.tabs.length > 1) {
+      const idx = ws.tabs.findIndex(t => t.id === ws.activeTabId);
+      setActiveTab(ws.tabs[(idx + 1) % ws.tabs.length].id);
+    }
+  }
+});
+ipcRenderer.on('keyboard-shortcut-prev-tab', () => {
+  if (appMode !== 'start') {
+    const ws = workspaces[currentWorkspaceId];
+    if (ws && ws.tabs.length > 1) {
+      const idx = ws.tabs.findIndex(t => t.id === ws.activeTabId);
+      setActiveTab(ws.tabs[(idx - 1 + ws.tabs.length) % ws.tabs.length].id);
+    }
   }
 });
 
-ipcRenderer.on('keyboard-shortcut-new-tab', () => {
-  createTab();
+// --- PERMISSION PROMPT SYSTEM ---
+const permissionPrompt = document.getElementById('permissionPrompt');
+const permDomain = document.getElementById('permDomain');
+const permType = document.getElementById('permType');
+const permIcon = document.getElementById('permIcon');
+const permAllowBtn = document.getElementById('permAllowBtn');
+const permBlockBtn = document.getElementById('permBlockBtn');
+const permDismissBtn = document.getElementById('permDismissBtn');
+const permRemember = document.getElementById('permRemember');
+
+const PERM_META = {
+  geolocation: { icon: '📍', label: 'location' },
+  notifications: { icon: '🔔', label: 'notifications' },
+  camera: { icon: '📷', label: 'camera' },
+  microphone: { icon: '🎙️', label: 'microphone' },
+  media: { icon: '🎙️', label: 'microphone & camera' },
+  'clipboard-read': { icon: '📋', label: 'clipboard' },
+};
+
+let permQueue = [];     // {key, origin, permission, webContentsId}[]
+let permActive = null;  // currently displayed prompt data
+
+function showNextPermission() {
+  if (permActive || permQueue.length === 0) {
+    if (!permActive) permissionPrompt.classList.remove('visible');
+    return;
+  }
+
+  // Find next permission FOR THE ACTIVE TAB
+  const activeTab = getActiveTab();
+  const activeWv = activeTab ? webviews[activeTab.id] : null;
+  const activeWcId = activeWv ? activeWv.getWebContentsId() : null;
+
+  // Filter the queue to see if any pending items belong to the current tab
+  // If not, we keep the prompt hidden but the queue intact.
+  const nextIdx = permQueue.findIndex(p => p.webContentsId === activeWcId);
+
+  if (nextIdx === -1) {
+    permissionPrompt.classList.remove('visible');
+    return;
+  }
+
+  // Extract the specific item
+  permActive = permQueue.splice(nextIdx, 1)[0];
+
+  const meta = PERM_META[permActive.permission] || { icon: '🔒', label: permActive.permission };
+  permDomain.textContent = permActive.origin;
+  permType.textContent = meta.label;
+  permIcon.textContent = meta.icon;
+  permRemember.checked = false;
+  permissionPrompt.classList.add('visible');
+}
+
+function resolvePermission(decision) {
+  if (!permActive) return;
+  ipcRenderer.send('permission-decision', {
+    key: permActive.key,
+    decision,
+    remember: permRemember.checked
+  });
+  permissionPrompt.classList.remove('visible');
+  setTimeout(() => {
+    permActive = null;
+    showNextPermission();
+  }, 320);
+}
+
+// --- SITE INFO LOGIC ---
+async function renderSiteInfo() {
+  const tab = getActiveTab();
+  if (!tab) return;
+
+  let origin = 'Internal';
+  try { origin = new URL(tab.url).hostname || 'Internal'; } catch (e) { }
+
+  siteInfoDomain.textContent = origin;
+
+  const isSecure = tab.url.startsWith('https://');
+  siteInfoSecurity.innerHTML = isSecure
+    ? `<span style="color:#4cd137">🔒</span> Connection is secure`
+    : `<span style="color:#e84118">⚠️</span> Connection is not secure`;
+
+  // Fetch permissions from main
+  const perms = await ipcRenderer.invoke('get-site-permissions', origin);
+  sitePermList.innerHTML = '';
+
+  const keys = Object.keys(perms);
+  if (keys.length === 0) {
+    sitePermList.innerHTML = `<div class="empty-state">No special permissions used.</div>`;
+  } else {
+    keys.forEach(p => {
+      const meta = PERM_META[p] || { icon: '⚙️', label: p };
+      const item = document.createElement('div');
+      item.className = 'site-perm-item';
+      item.innerHTML = `
+        <div style="display:flex; align-items:center; gap:8px;">
+          <span>${meta.icon}</span>
+          <span>${meta.label}</span>
+        </div>
+        <div class="perm-status ${perms[p]}">${perms[p]}</div>
+      `;
+      // Click to toggle/revoke could be added here
+      sitePermList.appendChild(item);
+    });
+  }
+}
+
+siteInfoBtn.addEventListener('click', (e) => {
+  e.stopPropagation();
+  siteInfoMenu.classList.toggle('visible');
+  if (siteInfoMenu.classList.contains('visible')) renderSiteInfo();
 });
 
+resetSitePermsBtn.addEventListener('click', async () => {
+  const tab = getActiveTab();
+  if (!tab) return;
+  let origin = '';
+  try { origin = new URL(tab.url).hostname; } catch (e) { }
+  if (!origin) return;
+
+  // We'll need a way to reset all for origin. For now, we can loop if we had the list,
+  // or add a new IPC. Let's send a generic "reset" for origin.
+  const perms = await ipcRenderer.invoke('get-site-permissions', origin);
+  Object.keys(perms).forEach(p => {
+    ipcRenderer.send('revoke-site-permission', { origin, permission: p });
+  });
+
+  renderSiteInfo();
+});
+
+// Close popovers on click outside
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('.site-info-popover') && !e.target.closest('.site-info-btn')) {
+    siteInfoMenu.classList.remove('visible');
+  }
+});
+
+permAllowBtn.addEventListener('click', () => resolvePermission('allow'));
+permBlockBtn.addEventListener('click', () => resolvePermission('block'));
+permDismissBtn.addEventListener('click', () => resolvePermission('block')); // dismiss = block without remember
+
+ipcRenderer.on('show-permission-prompt', (e, data) => {
+  permQueue.push(data);
+  showNextPermission();
+});
+
+ipcRenderer.on('dismiss-permission-prompt', (e, { key }) => {
+  // Timed-out from main process — close if it's the active one
+  if (permActive && permActive.key === key) {
+    permissionPrompt.classList.remove('visible');
+    setTimeout(() => { permActive = null; showNextPermission(); }, 320);
+  } else {
+    permQueue = permQueue.filter(p => p.key !== key);
+  }
+});
+
+// --- POPUP PROMPT SYSTEM ---
+const popupPrompt = document.getElementById('popupPrompt');
+const popupOrigin = document.getElementById('popupOrigin');
+const popupUrl = document.getElementById('popupUrl');
+const popupBlockBtn = document.getElementById('popupBlockBtn');
+const popupTabBtn = document.getElementById('popupTabBtn');
+const popupWindowBtn = document.getElementById('popupWindowBtn');
+const popupDismissBtn = document.getElementById('popupDismissBtn');
+
+let popupQueue = [];
+let popupActive = null;
+
+function queuePopupRequest(url, disposition) {
+  popupQueue.push({ url, disposition });
+  showNextPopup();
+}
+
+function showNextPopup() {
+  if (popupActive || popupQueue.length === 0) return;
+  popupActive = popupQueue.shift();
+
+  try {
+    popupOrigin.textContent = new URL(popupActive.url).hostname;
+  } catch (e) {
+    popupOrigin.textContent = 'Site';
+  }
+  popupUrl.textContent = popupActive.url;
+  popupPrompt.classList.add('visible');
+}
+
+function resolvePopup(action) {
+  if (!popupActive) return;
+
+  const url = popupActive.url;
+  if (action === 'tab') {
+    createTab(url);
+  } else if (action === 'window') {
+    ipcRenderer.send('open-new-window', url);
+  }
+
+  popupPrompt.classList.remove('visible');
+  setTimeout(() => {
+    popupActive = null;
+    showNextPopup();
+  }, 320);
+}
+
+popupBlockBtn.addEventListener('click', () => resolvePopup('block'));
+popupTabBtn.addEventListener('click', () => resolvePopup('tab'));
+popupWindowBtn.addEventListener('click', () => resolvePopup('window'));
+popupDismissBtn.addEventListener('click', () => resolvePopup('block'));
+
+// --- CLOUD SYNC ENGINE ---
+async function syncPush() {
+  if (!syncUser) return;
+  setSyncStatus('syncing');
+
+  const data = {
+    workspaces: workspaces,
+    currentWorkspaceId: currentWorkspaceId,
+    bookmarks: [], // Placeholder for future bookmarks feature
+    history: [],   // Placeholder for future history feature
+    settings: settings,
+    lastModified: Date.now()
+  };
+
+  const res = await ipcRenderer.invoke('sync-data-push', { data, email: syncUser.email });
+  if (res.success) {
+    lastSyncTimestamp = new Date().toLocaleTimeString();
+    localStorage.setItem('lastSyncTimestamp', lastSyncTimestamp);
+    if (lastSyncTime) lastSyncTime.textContent = lastSyncTimestamp;
+    setSyncStatus('online');
+  } else {
+    setSyncStatus('offline');
+  }
+}
+
+async function syncPull() {
+  if (!syncUser) return;
+  setSyncStatus('syncing');
+
+  const res = await ipcRenderer.invoke('sync-data-pull', syncUser.email);
+  if (res.success && res.data) {
+    // Basic merge: remote wins for simplicity in this MVP
+    if (res.data.workspaces) {
+      Object.assign(workspaces, res.data.workspaces);
+      localStorage.setItem('workspaces', JSON.stringify(workspaces));
+      // Re-render workspaces if needed
+      renderWorkspaceTabs();
+    }
+    if (res.data.settings) {
+      Object.assign(settings, res.data.settings);
+      localStorage.setItem('settings', JSON.stringify(settings));
+    }
+    setSyncStatus('online');
+  } else {
+    setSyncStatus('online'); // even if empty, we are logged in
+  }
+}
+
+function setSyncStatus(status) {
+  if (!syncBadge) return;
+  syncBadge.className = 'sync-badge ' + status;
+}
+
+function updateAuthUI() {
+  if (syncUser) {
+    authForm.style.display = 'none';
+    authProfile.style.display = 'block';
+    profileEmail.textContent = syncUser.email;
+    authStatusText.textContent = 'Account synchronized';
+    if (lastSyncTime) lastSyncTime.textContent = lastSyncTimestamp || 'Never';
+    setSyncStatus('online');
+  } else {
+    authForm.style.display = 'block';
+    authProfile.style.display = 'none';
+    authStatusText.textContent = 'Sign in to sync your data across devices';
+    setSyncStatus('offline');
+  }
+}
+
+userBtn.addEventListener('click', () => {
+  authModal.classList.add('visible');
+  updateAuthUI();
+});
+
+closeAuthBtn.addEventListener('click', () => authModal.classList.remove('visible'));
+
+authSubmitBtn.addEventListener('click', async () => {
+  const email = authEmail.value;
+  const password = authPass.value;
+  if (!email || !password) return;
+
+  authSubmitBtn.disabled = true;
+  authSubmitBtn.textContent = 'Signing in...';
+
+  const res = await ipcRenderer.invoke('auth-login', { email, password });
+  if (res.success) {
+    syncUser = { email: res.email, token: res.token };
+    localStorage.setItem('syncUser', JSON.stringify(syncUser));
+    updateAuthUI();
+    await syncPull();
+    await syncPush();
+  } else {
+    alert('Authentication failed');
+  }
+
+  authSubmitBtn.disabled = false;
+  authSubmitBtn.textContent = 'Sign In & Sync';
+});
+
+signOutBtn.addEventListener('click', () => {
+  syncUser = null;
+  localStorage.removeItem('syncUser');
+  updateAuthUI();
+});
+
+syncNowBtn.addEventListener('click', () => syncPush());
+
+// Initial Auth Setup
+updateAuthUI();
+
+// Auto-Sync Interval (every 5 minutes if logged in)
+setInterval(() => {
+  if (syncUser) syncPush();
+}, 5 * 60 * 1000);
+
 // === INITIALIZE APP ===
-loadSession();
+const startupUrl = urlParams.get('url');
+
+if (startupUrl) {
+  // If we have a startup URL (e.g. from window.open -> New Window), 
+  // clear the session-load logic for this window instance and open the target.
+  createTab(startupUrl);
+} else {
+  loadSession();
+  restoreSessionUI();
+}
+
 ipcRenderer.send('update-shield-mode', settings.shieldMode || 'standard');
-renderStartPage();
+
+// Startup Navigation: If no tabs are restored, load the homepage or start page
+setTimeout(() => {
+  const ws = workspaces[currentWorkspaceId];
+  if (!startupUrl && (!ws || ws.tabs.length === 0)) {
+    if (settings.homepageMode === 'homepage' && settings.homepageUrl) {
+      createTab(formatInput(settings.homepageUrl));
+    } else {
+      renderStartPage();
+    }
+  }
+}, 500); // Give session restore a moment to finish
 renderExtensionsManager();
+
+// --- NETWORK STATUS MONITOR ---
+window.addEventListener('online', () => showStatus('Back Online'));
+window.addEventListener('offline', () => showStatus('Connection Lost'));

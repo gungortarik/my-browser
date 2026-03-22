@@ -112,8 +112,8 @@
         <line x1="12" y1="17" x2="12.01" y2="17"></line>
       </svg>
     </div>
-    <h1 id="title">This site can't be reached</h1>
-    <p id="desc">Check if there is a typo in the URL, or if your internet connection is active.</p>
+    <h1 id="errorTitle">This site can't be reached</h1>
+    <p id="errorDesc">Check if there is a typo in the URL, or if your internet connection is active.</p>
     <div class="error-code" id="errorCode">ERR_UNKNOWN</div>
     <div>
       <button class="btn" id="retryBtn">Try Again</button>
@@ -122,14 +122,35 @@
   <script>
     const urlParams = new URLSearchParams(window.location.search);
     const retryUrl = urlParams.get('url');
-    const errorDesc = urlParams.get('error') || 'Navigation Failed';
+    const errorMsg = urlParams.get('error') || 'Unknown Error';
+    const type = urlParams.get('type') || 'network';
 
-    if (errorDesc) {
-      document.getElementById('errorCode').textContent = errorDesc.toUpperCase();
+    const titleEl = document.getElementById('errorTitle');
+    const descEl = document.getElementById('errorDesc');
+    const codeEl = document.getElementById('errorCode');
+    const iconEl = document.querySelector('.icon');
+
+    if (type === 'crash') {
+      titleEl.textContent = 'Aw, Snap!';
+      descEl.textContent = 'Something went wrong while displaying this webpage. The process ended unexpectedly.';
+      codeEl.textContent = `RESULT_CODE: ${errorMsg.toUpperCase()}`;
+      iconEl.innerHTML = `
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+          <line x1="12" y1="9" x2="12" y2="13"></line>
+          <line x1="12" y1="17" x2="12.01" y2="17"></line>
+        </svg>
+      `;
+      iconEl.style.color = '#ff4757';
+      iconEl.style.background = 'rgba(255, 71, 87, 0.15)';
+    } else {
+      titleEl.textContent = 'This site can\'t be reached';
+      descEl.textContent = 'Check if there is a typo in the URL, or if your internet connection is active.';
+      codeEl.textContent = errorMsg.toUpperCase();
     }
 
     document.getElementById('retryBtn').addEventListener('click', () => {
-      if (retryUrl) {
+      if (retryUrl && retryUrl !== 'null' && retryUrl !== 'undefined') {
         window.location.href = retryUrl;
       } else {
         window.history.back();

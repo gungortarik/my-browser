@@ -1,4 +1,4 @@
-const { app, BrowserWindow, session, Menu, clipboard, ipcMain, dialog, safeStorage, shell } = require('electron')
+const { app, BrowserWindow, session, Menu, clipboard, ipcMain, dialog, safeStorage, shell, globalShortcut } = require('electron')
 const path = require('path')
 const fs = require('fs')
 const os = require('os')
@@ -41,13 +41,13 @@ function loadExtensionPaths() {
   if (fs.existsSync(extListPath)) {
     try {
       loadedExtensionPaths = JSON.parse(fs.readFileSync(extListPath, 'utf8'));
-    } catch(e) { console.error('Ext format error:', e) }
+    } catch (e) { console.error('Ext format error:', e) }
   }
 }
 function saveExtensionPaths() {
   try {
     fs.writeFileSync(extListPath, JSON.stringify(loadedExtensionPaths, null, 2), 'utf8');
-  } catch(e) { console.error('Failed writing ext:', e) }
+  } catch (e) { console.error('Failed writing ext:', e) }
 }
 // ----------------------
 
@@ -59,17 +59,38 @@ function loadAutofillVault() {
   if (fs.existsSync(autofillPath)) {
     try {
       autofillVault = JSON.parse(fs.readFileSync(autofillPath, 'utf8'));
-    } catch(e) { console.error('Autofill error:', e) }
+    } catch (e) { console.error('Autofill error:', e) }
   }
 }
 function saveAutofillVault() {
   try {
     fs.writeFileSync(autofillPath, JSON.stringify(autofillVault, null, 2), 'utf8');
-  } catch(e) {}
+  } catch (e) { }
 }
 // ----------------------
 
-function createWindow(isIncognito = false) {
+// --- PERMISSION VAULT ---
+const permissionsPath = path.join(appDataPath, 'permissions.json');
+let permissionVault = {};
+
+// --- CLOUD SYNC VAULT ---
+const cloudDataPath = path.join(appDataPath, 'cloud_mock.json');
+let cloudStorage = {}; // Mock remote data
+let authVault = { token: null, email: null };
+
+function loadPermissionVault() {
+  if (fs.existsSync(permissionsPath)) {
+    try { permissionVault = JSON.parse(fs.readFileSync(permissionsPath, 'utf8')); } catch (e) { }
+  }
+}
+function savePermissionVault() {
+  try { fs.writeFileSync(permissionsPath, JSON.stringify(permissionVault, null, 2), 'utf8'); } catch (e) { }
+}
+// Pending callbacks waiting for the user's renderer-side response
+const pendingPermissions = new Map(); // key => callback
+// ----------------------
+
+function createWindow(isIncognito = false, initialUrl = '') {
   const win = new BrowserWindow({
     width: 1400,
     height: 900,
@@ -77,7 +98,8 @@ function createWindow(isIncognito = false) {
     webPreferences: {
       nodeIntegration: true,
       contextIsolation: false,
-      webviewTag: true
+      webviewTag: true,
+      partition: isIncognito ? 'persist:incognito' : undefined
     }
   })
 
@@ -147,46 +169,48 @@ function createWindow(isIncognito = false) {
     callback({ cancel: false, requestHeaders: details.requestHeaders })
   })
 
-  // Set default generic permission response (Deny all) - Mullvad style
-  win.webContents.session.setPermissionRequestHandler((webContents, permission, callback) => {
-    console.log(`[Privacy] Automatically denied permission request for: ${permission}`)
-    callback(false) // Automatically deny geolocation, camera, mic, etc. for extreme privacy
-  })
+  // --- SMART PERMISSION SYSTEM ---
+  // Permissions that can be prompted (ask the user per-domain).
+  const PROMPTABLE = new Set(['geolocation', 'notifications', 'camera', 'microphone', 'media', 'clipboard-read']);
+
+  win.webContents.session.setPermissionRequestHandler((webContents, permission, callback, details) => {
+    let origin = '';
+    try { origin = new URL(details.requestingUrl || '').hostname; } catch (_) { }
+
+    // 1. Check stored decision
+    const stored = permissionVault[origin]?.[permission];
+    if (stored === 'allow') { callback(true); return; }
+    if (stored === 'block') { callback(false); return; }
+
+    // 2. Auto-deny non-promptable or empty origins
+    if (!PROMPTABLE.has(permission) || !origin) {
+      console.log(`[Perm] Auto-denied: ${permission} for ${origin}`);
+      callback(false);
+      return;
+    }
+
+    // 3. Ask the user via renderer UI
+    const key = `${origin}::${permission}::${Date.now()}`;
+    pendingPermissions.set(key, callback);
+    win.webContents.send('show-permission-prompt', {
+      key,
+      origin,
+      permission,
+      webContentsId: webContents.id
+    });
+
+    // 4. Auto-deny after 60 seconds if user ignores
+    setTimeout(() => {
+      if (pendingPermissions.has(key)) {
+        pendingPermissions.get(key)(false);
+        pendingPermissions.delete(key);
+        win.webContents.send('dismiss-permission-prompt', { key });
+      }
+    }, 60000);
+  });
 
   // Hardcore WebRTC policy - Disable non-proxied UDP (prevents IP leaks behind VPN)
   win.webContents.setWebRTCIPHandlingPolicy('disable_non_proxied_udp')
-
-  // --- DOWNLOAD MANAGER ---
-  win.webContents.session.on('will-download', (event, item, webContents) => {
-    const fileName = item.getFilename();
-    const id = Date.now().toString(); // unique ID
-
-    if (downloadSettings.askEveryTime) {
-      item.setSaveDialogOptions({ defaultPath: fileName });
-    } else if (downloadSettings.path) {
-      item.setSavePath(path.join(downloadSettings.path, fileName));
-    }
-
-    win.webContents.send('download-started', { id, fileName });
-
-    item.on('updated', (event, state) => {
-      if (state === 'interrupted') {
-        win.webContents.send('download-interrupted', { id });
-      } else if (state === 'progressing') {
-        if (!item.isPaused()) {
-          const received = item.getReceivedBytes();
-          const total = item.getTotalBytes();
-          const percent = total > 0 ? (received / total) * 100 : 0;
-          win.webContents.send('download-progress', { id, percent, received, total });
-        }
-      }
-    });
-
-    item.once('done', (event, state) => {
-      const savePath = item.getSavePath();
-      win.webContents.send('download-done', { id, state, savePath });
-    });
-  });
 
   // Prevent opening new windows natively
   win.webContents.setWindowOpenHandler(({ url }) => {
@@ -194,7 +218,8 @@ function createWindow(isIncognito = false) {
     return { action: 'deny' };
   });
 
-  win.loadURL(`file://${path.join(__dirname, 'index.html')}?incognito=${isIncognito}`);
+  const queryParams = `incognito=${isIncognito}${initialUrl ? `&url=${encodeURIComponent(initialUrl)}` : ''}`;
+  win.loadURL(`file://${path.join(__dirname, 'index.html')}?${queryParams}`);
 }
 
 // Re-removed duplicate app.whenReady
@@ -359,8 +384,8 @@ ipcMain.handle('get-autofill-data', () => {
   const cards = autofillVault.cards.map(card => {
     let num = card.number;
     if (safeStorage.isEncryptionAvailable() && card.encrypted) {
-      try { num = safeStorage.decryptString(Buffer.from(card.number, 'base64')); } 
-      catch(e) { num = 'Error'; }
+      try { num = safeStorage.decryptString(Buffer.from(card.number, 'base64')); }
+      catch (e) { num = 'Error'; }
     }
     return { ...card, number: num };
   });
@@ -389,11 +414,11 @@ ipcMain.handle('save-autofill-card', (event, card) => {
     number = safeStorage.encryptString(card.number).toString('base64');
   }
   const secureCard = { ...card, number, encrypted: isEncrypted };
-  
+
   const index = autofillVault.cards.findIndex(c => c.id === card.id);
   if (index !== -1) autofillVault.cards[index] = secureCard;
   else autofillVault.cards.push({ ...secureCard, id: Date.now().toString() });
-  
+
   saveAutofillVault();
   return true;
 });
@@ -441,8 +466,8 @@ ipcMain.handle('get-extensions', () => {
       const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
       if (manifest.action && manifest.action.default_popup) popup = manifest.action.default_popup;
       else if (manifest.browser_action && manifest.browser_action.default_popup) popup = manifest.browser_action.default_popup;
-    } catch(e) {}
-    
+    } catch (e) { }
+
     return { id: ext.id, name: ext.name, version: ext.version, popup };
   });
 });
@@ -455,19 +480,19 @@ function setupDownloadHandler(sess) {
     const id = Date.now().toString() + Math.random().toString(36).substr(2, 5);
     const filename = item.getFilename();
     const totalBytes = item.getTotalBytes();
-    
+
     activeDownloadItems.set(id, item);
-    
+
     let win = BrowserWindow.fromWebContents(webContents);
     if (!win) {
       const wins = BrowserWindow.getAllWindows();
-      if(wins.length > 0) win = wins[0];
+      if (wins.length > 0) win = wins[0];
     }
-    
+
     if (win) {
       win.webContents.send('download-started', { id, filename, totalBytes });
     }
-    
+
     item.on('updated', (event, state) => {
       if (win) {
         win.webContents.send('download-progress', {
@@ -478,7 +503,7 @@ function setupDownloadHandler(sess) {
         });
       }
     });
-    
+
     item.on('done', (event, state) => {
       if (win) {
         win.webContents.send('download-done', {
@@ -521,36 +546,36 @@ ipcMain.handle('install-chrome-extension', async (event, extId) => {
   try {
     const extDir = path.join(appDataPath, 'CrxStore');
     if (!fs.existsSync(extDir)) fs.mkdirSync(extDir, { recursive: true });
-    
+
     const crxPath = path.join(extDir, `${extId}.crx`);
     const extractPath = path.join(extDir, extId);
-    
+
     const url = `https://clients2.google.com/service/update2/crx?response=redirect&prodversion=114.0.0.0&acceptformat=crx2,crx3&x=id%3D${extId}%26uc`;
-    
+
     const response = await axios({
       method: 'GET',
       url: url,
       responseType: 'stream'
     });
-    
+
     const writer = fs.createWriteStream(crxPath);
     response.data.pipe(writer);
-    
+
     await new Promise((resolve, reject) => {
       writer.on('finish', resolve);
       writer.on('error', reject);
     });
-    
+
     await unzip(crxPath, extractPath);
-    
+
     const ext = await session.defaultSession.loadExtension(extractPath, { allowFileAccess: true });
     if (!loadedExtensionPaths.includes(extractPath)) {
       loadedExtensionPaths.push(extractPath);
       saveExtensionPaths();
     }
-    
-    try { fs.unlinkSync(crxPath); } catch(e) {}
-    
+
+    try { fs.unlinkSync(crxPath); } catch (e) { }
+
     return { success: true, id: ext.id, name: ext.name, version: ext.version };
   } catch (err) {
     console.error('CRX Install Failed:', err);
@@ -558,11 +583,93 @@ ipcMain.handle('install-chrome-extension', async (event, extId) => {
   }
 });
 
+// --- PERMISSION DECISION HANDLER ---
+ipcMain.on('permission-decision', (event, { key, decision, remember }) => {
+  const cb = pendingPermissions.get(key);
+  if (!cb) return;
+  pendingPermissions.delete(key);
+
+  const granted = decision === 'allow';
+  cb(granted);
+
+  if (remember) {
+    // Parse origin + permission from the key (format: "origin::permission::timestamp")
+    const parts = key.split('::');
+    const origin = parts[0];
+    const permission = parts[1];
+    if (!permissionVault[origin]) permissionVault[origin] = {};
+    permissionVault[origin][permission] = granted ? 'allow' : 'block';
+    savePermissionVault();
+  }
+});
+
+ipcMain.handle('get-site-permissions', (event, origin) => {
+  return origin ? (permissionVault[origin] || {}) : permissionVault;
+});
+
+ipcMain.on('revoke-site-permission', (event, { origin, permission }) => {
+  if (permissionVault[origin]) {
+    delete permissionVault[origin][permission];
+    if (Object.keys(permissionVault[origin]).length === 0) delete permissionVault[origin];
+    savePermissionVault();
+  }
+});
+
+ipcMain.on('open-new-window', (event, url) => {
+  createWindow(false, url);
+});
+
+ipcMain.on('open-incognito-window', () => {
+  createWindow(true);
+});
+
+// --- CLOUD SYNC & AUTH HANDLERS ---
+function loadCloudData() {
+  if (fs.existsSync(cloudDataPath)) {
+    try {
+      cloudStorage = JSON.parse(fs.readFileSync(cloudDataPath, 'utf8'));
+    } catch (e) { console.error('Cloud load failed', e); }
+  }
+}
+
+function saveCloudData() {
+  fs.writeFileSync(cloudDataPath, JSON.stringify(cloudStorage, null, 2));
+}
+
+ipcMain.handle('auth-login', (e, { email, password }) => {
+  // Mock login: generates a "token" and encrypts it
+  const token = `tok_${Buffer.from(email + Date.now()).toString('base64').substring(0, 16)}`;
+  authVault.email = email;
+
+  try {
+    const encryptedToken = safeStorage.encryptString(token);
+    authVault.token = encryptedToken.toString('base64');
+  } catch (e) {
+    authVault.token = token; // Fallback if safeStorage not available
+  }
+
+  return { success: true, email, token };
+});
+
+ipcMain.handle('sync-data-push', (e, { data, email }) => {
+  if (!email) return { success: false, error: 'Not authenticated' };
+  cloudStorage[email] = data;
+  saveCloudData();
+  return { success: true, timestamp: Date.now() };
+});
+
+ipcMain.handle('sync-data-pull', (e, email) => {
+  if (!email) return { success: false, error: 'Not authenticated' };
+  return { success: true, data: cloudStorage[email] || null };
+});
+
 app.whenReady().then(async () => {
   loadVault();
   loadExtensionPaths();
   loadAutofillVault();
-  
+  loadPermissionVault();
+  loadCloudData();
+
   // Explicitly mount unpacked Chrome extensions into the Global electron session
   for (const extPath of loadedExtensionPaths) {
     try {
@@ -576,14 +683,29 @@ app.whenReady().then(async () => {
 
   setupDownloadHandler(session.defaultSession);
   setupDownloadHandler(session.fromPartition('incognito'));
-  
+
   createWindow(false);
+
+  // --- GLOBAL KEYBOARD SHORTCUTS ---
+  // These fire even when a webview has keyboard focus (DOM events get swallowed by webviews).
+  function sendToFocusedWindow(channel) {
+    const win = BrowserWindow.getFocusedWindow();
+    if (win) win.webContents.send(channel);
+  }
+
+  const isMac = process.platform === 'darwin';
+  const mod = isMac ? 'Command' : 'Control';
+
+  globalShortcut.register(`${mod}+T`, () => sendToFocusedWindow('keyboard-shortcut-new-tab'));
+  globalShortcut.register(`${mod}+W`, () => sendToFocusedWindow('keyboard-shortcut-close-tab'));
+  globalShortcut.register(`${mod}+Shift+T`, () => sendToFocusedWindow('keyboard-shortcut-reopen-tab'));
+  globalShortcut.register(`${mod}+L`, () => sendToFocusedWindow('keyboard-shortcut-focus-url'));
+  globalShortcut.register(`${mod}+Tab`, () => sendToFocusedWindow('keyboard-shortcut-next-tab'));
+  globalShortcut.register(`${mod}+Shift+Tab`, () => sendToFocusedWindow('keyboard-shortcut-prev-tab'));
+  globalShortcut.register(`${mod}+Shift+N`, () => createWindow(true));
+  globalShortcut.register(`${mod}+N`, () => createWindow(false));
 })
 
-ipcMain.on('open-incognito-window', () => {
-  createWindow(true);
-});
-
-ipcMain.on('open-new-window', () => {
-  createWindow(false);
+app.on('will-quit', () => {
+  globalShortcut.unregisterAll();
 });
